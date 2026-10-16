@@ -1,0 +1,31 @@
+# Build and test on every pull request and push to main, on a stock runner, from nuget.org alone: a contributor
+# outside the organisation builds this repository exactly the same way.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          global-json-file: global.json
+
+      # Nothing to build until the first project arrives; the step says so rather than passing silently.
+      - name: Build and test
+        run: |
+          set -euo pipefail
+          if [ ! -f SimplArchiveMessenger.slnx ]; then
+            echo "::notice::No solution yet: the first slice adds SimplArchiveMessenger.slnx."
+            exit 0
+          fi
+          dotnet build SimplArchiveMessenger.slnx -warnaserror
+          dotnet test SimplArchiveMessenger.slnx --no-build
