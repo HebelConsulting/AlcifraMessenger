@@ -119,7 +119,9 @@ public sealed class CreateGroupRequest
 public sealed class AddMemberRequest
 {
     public Guid UserId { get; set; }
-    public byte[] Key { get; set; } = [];
+
+    /// <summary>The new epoch's key for every member and the newcomer: a joiner gets nothing that opens earlier messages.</summary>
+    public List<KeyRequest> Keys { get; set; } = [];
 }
 
 public sealed class RemoveMemberRequest

@@ -13,6 +13,8 @@
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.3" />
     <!-- MIT. The real controllers in process, so the client library is tested against the wire it will meet. -->
     <PackageReference Include="Microsoft.AspNetCore.TestHost" Version="10.0.13" />
+    <!-- MIT. Opening a sealed key with a test certificate's private key, standing in for the hardware key. -->
+    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
     <Using Include="Xunit" />
   </ItemGroup>
 

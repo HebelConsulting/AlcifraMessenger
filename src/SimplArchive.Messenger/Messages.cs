@@ -24,9 +24,13 @@ public sealed class Messages(
         var me = conversations.Me;
         var hidden = db.HiddenMessages.Where(h => h.UserId == me).Select(h => h.MessageId);
 
+        // Only from the first epoch the caller holds a key for: what came before they joined is not theirs to list.
+        var firstEpoch = await db.EpochKeys.Where(k => k.ConversationId == conversationId && k.UserId == me)
+            .MinAsync(k => (int?)k.Epoch, cancellationToken) ?? int.MaxValue;
+
         // Ordered in memory: SQLite (the tests' provider) cannot order by DateTimeOffset, and a conversation's page is small.
         var all = (await db.Messages.AsNoTracking()
-                .Where(m => m.ConversationId == conversationId && !hidden.Contains(m.Id))
+                .Where(m => m.ConversationId == conversationId && m.Epoch >= firstEpoch && !hidden.Contains(m.Id))
                 .ToListAsync(cancellationToken))
             .OrderBy(m => m.SentAt).ThenBy(m => m.Id)
             .ToList();

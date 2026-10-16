@@ -183,8 +183,11 @@ public sealed class Conversations(MessengerReadModelContext db, IModuleArchiveFa
         return conversationId;
     }
 
-    /// <summary>An administrator adds <paramref name="key"/>'s user at the CURRENT epoch: they read from joining on.</summary>
-    public async Task AddMemberAsync(Guid conversationId, WrappedKey key, CancellationToken cancellationToken)
+    /// <summary>
+    /// An administrator adds <paramref name="userId"/> by starting a NEW epoch, with <paramref name="keys"/> for every member
+    /// and the newcomer: a joiner holds no key that opens anything sent before they joined.
+    /// </summary>
+    public async Task AddMemberAsync(Guid conversationId, Guid userId, IReadOnlyList<WrappedKey> keys, CancellationToken cancellationToken)
     {
         var view = await MemberViewAsync(conversationId, cancellationToken);
         await RequireAdminAsync(view, cancellationToken);
@@ -193,20 +196,26 @@ public sealed class Conversations(MessengerReadModelContext db, IModuleArchiveFa
             throw MessengerErrors.Invalid("A one-to-one conversation stays between two people; start a group instead.");
         }
 
-        if (view.Members.Contains(key.UserId))
+        if (view.Members.Contains(userId))
         {
             return;
         }
 
-        if ((await archive.GetUserCertificatesAsync(key.UserId, cancellationToken)).Count == 0)
+        if ((await archive.GetUserCertificatesAsync(userId, cancellationToken)).Count == 0)
         {
             throw MessengerErrors.NoKey("This person");
         }
 
+        var members = view.Members.Append(userId).ToList();
+        if (keys.Count != members.Count || members.Any(m => keys.Count(k => k.UserId == m) != 1) || keys.Any(k => k.Key.Length == 0))
+        {
+            throw MessengerErrors.KeysDoNotMatchMembers();
+        }
+
         await archive.InTransactionAsync(async () =>
         {
-            await archive.GrantAccessAsync(conversationId, key.UserId, ModuleAccess.Read, cancellationToken);
-            db.EpochKeys.Add(new EpochKey { TenantId = caller.TenantId, ConversationId = conversationId, Epoch = view.Epoch, UserId = key.UserId, WrappedKey = key.Key });
+            await archive.GrantAccessAsync(conversationId, userId, ModuleAccess.Read, cancellationToken);
+            AddEpoch(conversationId, view.Epoch + 1, keys);
             await db.SaveChangesAsync(cancellationToken);
         }, cancellationToken);
     }
