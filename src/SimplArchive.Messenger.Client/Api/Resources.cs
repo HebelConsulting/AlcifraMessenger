@@ -52,6 +52,9 @@ public sealed class Conversation : Resource
     /// <summary>A one-to-one chat's other person, by name: the chat's title.</summary>
     public string? CounterpartName { get; set; }
 
+    /// <summary>Somebody left: publish a new key for every member (<see cref="MessengerApi.PublishEpochAsync"/>) before sending.</summary>
+    public bool NeedsNewEpoch { get; set; }
+
     /// <summary>The members at the current epoch, each with the links the caller may follow for them.</summary>
     public List<Member> Members { get; set; } = [];
 

@@ -32,6 +32,9 @@ public sealed class Conversations(MessengerReadModelContext db, IModuleArchiveFa
 
         /// <summary>The caller's copy of EVERY epoch's key they hold: messages from before a removal stay readable.</summary>
         public IReadOnlyDictionary<int, byte[]> MyKeys { get; init; } = new Dictionary<int, byte[]>();
+
+        /// <summary>Somebody left under the current epoch: a remaining member must publish the next before anything is sent.</summary>
+        public bool NeedsNewEpoch { get; init; }
     }
 
     public Guid Me => caller.UserId ?? throw MessengerErrors.NotSignedIn();
@@ -108,6 +111,7 @@ public sealed class Conversations(MessengerReadModelContext db, IModuleArchiveFa
             AdminIds = adminIds,
             Names = names,
             MyKeys = myKeys,
+            NeedsNewEpoch = await db.KeyEpochs.AnyAsync(e => e.ConversationId == conversationId && e.Epoch == epoch && e.ClosedAt != null, cancellationToken),
         };
     }
 
@@ -275,7 +279,9 @@ public sealed class Conversations(MessengerReadModelContext db, IModuleArchiveFa
             return;
         }
 
-        if (nextKeys.Count != remaining.Count || remaining.Any(m => nextKeys.All(k => k.UserId != m)))
+        // Leaving makes no key: the leaver would know it. Removing someone else, an administrator makes the next one.
+        var leaving = userId == Me;
+        if (leaving ? nextKeys.Count != 0 : nextKeys.Count != remaining.Count || remaining.Any(m => nextKeys.All(k => k.UserId != m)))
         {
             throw MessengerErrors.KeysDoNotMatchMembers();
         }
@@ -296,9 +302,50 @@ public sealed class Conversations(MessengerReadModelContext db, IModuleArchiveFa
             }
 
             await archive.RevokeAccessAsync(conversationId, userId, cancellationToken);
-            AddEpoch(conversationId, view.Epoch + 1, nextKeys);
+            if (leaving)
+            {
+                // Out of the current epoch's members at once, and the epoch closed for writing until somebody who
+                // remains publishes the next.
+                db.EpochKeys.RemoveRange(db.EpochKeys.Where(k => k.ConversationId == conversationId && k.Epoch == view.Epoch && k.UserId == userId));
+                var current = await db.KeyEpochs.SingleAsync(e => e.ConversationId == conversationId && e.Epoch == view.Epoch, cancellationToken);
+                current.ClosedAt ??= DateTimeOffset.UtcNow;
+            }
+            else
+            {
+                AddEpoch(conversationId, view.Epoch + 1, nextKeys);
+            }
+
             await db.SaveChangesAsync(cancellationToken);
         }, cancellationToken);
+    }
+
+    /// <summary>
+    /// A remaining member publishes the next epoch after somebody left: a key per member, made on their own device. Two
+    /// members publishing at once: the second is told the epoch moved on, refreshes, and finds it done.
+    /// </summary>
+    public async Task PublishEpochAsync(Guid conversationId, IReadOnlyList<WrappedKey> keys, CancellationToken cancellationToken)
+    {
+        var view = await MemberViewAsync(conversationId, cancellationToken);
+        if (!view.NeedsNewEpoch)
+        {
+            throw MessengerErrors.NotClosed();
+        }
+
+        if (keys.Count != view.Members.Count || view.Members.Any(m => keys.Count(k => k.UserId == m) != 1) || keys.Any(k => k.Key.Length == 0))
+        {
+            throw MessengerErrors.KeysDoNotMatchMembers();
+        }
+
+        AddEpoch(conversationId, view.Epoch + 1, keys);
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            db.ChangeTracker.Clear();
+            throw MessengerErrors.StaleEpoch(await CurrentEpochAsync(conversationId, cancellationToken));
+        }
     }
 
     /// <summary>The signed-in caller's name and e-mail.</summary>

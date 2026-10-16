@@ -96,6 +96,9 @@ namespace SimplArchive.Messenger.ReadModel.Migrations
                     b.Property<int>("Epoch")
                         .HasColumnType("integer");
 
+                    b.Property<DateTimeOffset?>("ClosedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 

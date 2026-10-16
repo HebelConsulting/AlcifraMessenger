@@ -21,6 +21,9 @@ public sealed class ConversationResource : HypermediaResource
     /// <summary>A one-to-one chat's other person, by name: the chat's title.</summary>
     public string? CounterpartName { get; set; }
 
+    /// <summary>Somebody left: follow <c>publish-epoch</c> with a new key for every member before sending.</summary>
+    public bool NeedsNewEpoch { get; set; }
+
     public List<MemberResource> Members { get; set; } = [];
     public List<string> Admins { get; set; } = [];
     public int Unread { get; set; }
@@ -121,8 +124,15 @@ public sealed class AddMemberRequest
 
 public sealed class RemoveMemberRequest
 {
-    /// <summary>The next epoch's keys, one per member who remains; empty when the last member leaves.</summary>
+    /// <summary>The next epoch's keys, one per member who remains, when an administrator removes someone; empty when a
+    /// member leaves, because the leaver must not know the next key.</summary>
     public List<KeyRequest> NextKeys { get; set; } = [];
+}
+
+public sealed class PublishEpochRequest
+{
+    /// <summary>The next epoch's key, one per member.</summary>
+    public List<KeyRequest> Keys { get; set; } = [];
 }
 
 public sealed class SendRequest

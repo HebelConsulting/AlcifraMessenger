@@ -40,6 +40,12 @@ public static class MessengerErrors
     public static ModuleApiException EtagMismatch() => new("ETAG_MISMATCH", 412,
         "The message has been changed since you read it.");
 
+    public static ModuleApiException RekeyNeeded() => new("MESSENGER_REKEY_NEEDED", 409,
+        "Somebody left: a new key must be published before anything more is sent.");
+
+    public static ModuleApiException NotClosed() => new("MESSENGER_EPOCH_OPEN", 409,
+        "The current key is still in use; a new one is published when somebody leaves.");
+
     public static ModuleApiException LastAdmin() => new("MESSENGER_LAST_ADMIN", 409,
         "A group keeps at least one administrator: make someone else one first.");
 

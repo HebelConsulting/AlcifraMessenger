@@ -79,9 +79,20 @@ public sealed class MessengerApi(HttpClient http, HttpClient? storage = null)
     public Task AddMemberAsync(Conversation conversation, WrappedKey key, CancellationToken cancellationToken = default) =>
         SendAsync(Follow(conversation, "add-member"), new { userId = key.UserId, key = key.Key }, cancellationToken);
 
-    /// <summary>Removes a member (an administrator) or leaves (the member), with the next epoch's keys for those who remain.</summary>
+    /// <summary>An administrator removes a member, with the next epoch's keys for those who remain.</summary>
     public Task RemoveMemberAsync(Member member, IReadOnlyList<WrappedKey> nextKeys, CancellationToken cancellationToken = default) =>
         SendAsync(Follow(member, "remove"), new { nextKeys = Keys(nextKeys) }, cancellationToken);
+
+    /// <summary>
+    /// The caller leaves, with no keys: the next epoch is published by a member who remains, never by the one leaving,
+    /// who would then know it. <paramref name="myself"/> is the caller's own entry among the members.
+    /// </summary>
+    public Task LeaveAsync(Member myself, CancellationToken cancellationToken = default) =>
+        SendAsync(Follow(myself, "remove"), new { nextKeys = Array.Empty<object>() }, cancellationToken);
+
+    /// <summary>After somebody left: a new key for every member, published before anything more is sent.</summary>
+    public Task PublishEpochAsync(Conversation conversation, IReadOnlyList<WrappedKey> keys, CancellationToken cancellationToken = default) =>
+        SendAsync(Follow(conversation, "publish-epoch"), new { keys = Keys(keys) }, cancellationToken);
 
     /// <summary>An administrator makes a member an administrator.</summary>
     public Task MakeAdminAsync(Member member, CancellationToken cancellationToken = default) =>

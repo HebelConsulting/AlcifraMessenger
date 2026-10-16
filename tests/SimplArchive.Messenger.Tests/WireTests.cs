@@ -174,6 +174,17 @@ public sealed class WireTests : IAsyncDisposable
         group = await api.RefreshAsync(group);
         Assert.Equal([(1, (byte)1), (2, (byte)4)], group.MyKeys.Select(k => (k.Epoch, k.Key.Single())));
 
+        // Tom leaves with no key; Anna's phone sees the closed epoch and publishes the next.
+        _caller.UserId = _tom;
+        await api.LeaveAsync((await api.RefreshAsync(group)).Members.Single(m => m.UserId == _tom));
+        _caller.UserId = _anna;
+        group = await api.RefreshAsync(group);
+        Assert.True(group.NeedsNewEpoch);
+        await api.PublishEpochAsync(group, [new ClientKey(_anna, [6])]);
+        group = await api.RefreshAsync(group);
+        Assert.Equal((3, false), (group.Epoch, group.NeedsNewEpoch));
+        page = await api.MessagesAsync(group);
+
         // A refusal arrives with the server's own code.
         var refusal = await Assert.ThrowsAsync<MessengerApiException>(() => api.SendAsync(page, Guid.NewGuid(), group.Epoch + 1, [9]));
         Assert.Equal((409, "MESSENGER_STALE_EPOCH"), (refusal.StatusCode, refusal.Code));
