@@ -16,8 +16,10 @@ Open source under the Apache License 2.0, all of it:
 
 ## Status
 
-**Just started.** The design is settled in the SimplArchive epic and its slices; the code arrives slice by slice:
-the key library first, then the server module, the client library, the views and the app.
+**Just started.** The design is settled in the SimplArchive epic and its slices; the code arrives slice by slice.
+
+- **Key library, `SimplArchive.Keys`** (`src/SimplArchive.Keys`): here, with its tests. Not on nuget.org yet.
+- Next: the server module, the client library, the views and the app.
 
 ## Building
 
