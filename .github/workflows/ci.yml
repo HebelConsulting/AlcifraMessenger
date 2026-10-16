@@ -19,6 +19,11 @@ jobs:
         with:
           global-json-file: global.json
 
+      # The screens (SimplArchive.Messenger.Views) are .NET MAUI for Android: the workload, and the SDK and JDK the runner
+      # image already carries.
+      - name: Install the MAUI Android workload
+        run: dotnet workload install maui-android
+
       # Nothing to build until the first project arrives; the step says so rather than passing silently.
       - name: Build and test
         run: |
