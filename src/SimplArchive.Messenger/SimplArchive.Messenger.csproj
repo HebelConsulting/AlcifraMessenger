@@ -6,8 +6,6 @@
     <AssemblyName>SimplArchive.Messenger</AssemblyName>
     <RootNamespace>SimplArchive.Messenger</RootNamespace>
     <PackageId>SimplArchive.Messenger</PackageId>
-    <!-- Without it the package would be 1.0.0, permanently, on nuget.org (owner, 2026-10-16: published there at 0.1.0). -->
-    <Version>0.1.0</Version>
     <Description>The SimplArchive Messenger module: conversations sealed to their members' hardware keys, stored as ciphertext.</Description>
     <Authors>Hebel Consulting</Authors>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
