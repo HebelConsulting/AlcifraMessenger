@@ -2,8 +2,6 @@
   <!-- The screens' arithmetic and texts, on any machine: the net10.0 build of the Views project, no device. -->
   <PropertyGroup>
     <IsPackable>false</IsPackable>
-    <UseMaui>true</UseMaui>
-    <SingleProject>false</SingleProject>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
