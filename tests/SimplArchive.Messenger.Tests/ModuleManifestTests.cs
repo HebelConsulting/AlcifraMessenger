@@ -17,6 +17,7 @@ public class ModuleManifestTests
         var objects = Assert.Single(_module.Masks, m => m.MaskId == MessengerMasks.MessageObject);
         Assert.Equal("messenger", objects.ContentSegment);
         Assert.Equal(ModuleMaskExemptions.All, objects.Exemptions);
+        Assert.True(objects.ContentIsSealed);   // the core refuses anything but an envelope, and serves it on the strict tier
         Assert.False(objects.IsFolderMask);
     }
 

@@ -50,6 +50,8 @@ public static class MessengerMasks
             // Sealed to its readers, so the core can neither search nor preview it, and the module owns its lifetime.
             ContentSegment = "messenger",
             Exemptions = ModuleMaskExemptions.All,
+            // The core checks every file is a CMS envelope and then hands it out on the strict tier too (ABI 1.20).
+            ContentIsSealed = true,
         },
     ];
 }
