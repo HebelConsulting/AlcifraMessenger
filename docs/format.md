@@ -5,8 +5,8 @@ alter or forge one without a member's key.
 
 ## Conversation keys
 
-- Each conversation has a **random 256-bit key per epoch**. A new epoch starts whenever a member leaves or is removed,
-  so a former member cannot read what follows. A member who joins receives the current epoch's key, never earlier ones.
+- Each conversation has a **random 256-bit key per epoch**. A new epoch starts whenever a member joins, leaves or is
+  removed: a former member cannot read what follows, and a new one cannot read what came before.
 - **The next key is never made by the one going.** On a removal, the removing administrator's device makes it; on a
   departure, the epoch is closed and a remaining member's device publishes the next before anything more is sent.
 - Each member's copy is a **CMS EnvelopedData** (RFC 5652) addressed to **all** of that member's enrolled certificates,
