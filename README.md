@@ -18,7 +18,9 @@ Open source under the Apache License 2.0, all of it:
 
 **Just started.** The design is settled in the SimplArchive epic and its slices; the code arrives slice by slice.
 
-- **Key library, `SimplArchive.Keys`** (`src/SimplArchive.Keys`): here, with its tests. Not on nuget.org yet.
+- **Key library, `SimplArchive.Keys`**: on nuget.org (0.1.0).
+- **Client library, `SimplArchive.Messenger.Client`**: the message format and the conversation keys, specified in
+  [docs/format.md](docs/format.md).
 - Next: the server module, the client library, the views and the app.
 
 ## Building
