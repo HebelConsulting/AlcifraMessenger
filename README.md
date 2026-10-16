@@ -16,12 +16,17 @@ Open source under the Apache License 2.0, all of it:
 
 ## Status
 
-**Just started.** The design is settled in the SimplArchive epic and its slices; the code arrives slice by slice.
+The server side is in place; the apps are next. The design is settled in the SimplArchive epic and its slices; the code
+arrives slice by slice.
 
 - **Key library, `SimplArchive.Keys`**: on nuget.org (0.1.0).
 - **Client library, `SimplArchive.Messenger.Client`**: the message format and the conversation keys, specified in
   [docs/format.md](docs/format.md).
-- Next: the server module, the client library, the views and the app.
+- **Server module, `SimplArchive.Messenger`**: conversations, groups with administrators, key epochs, messages, read
+  markers, sealed files, and a "new messages" notification that carries nothing of the message. Its manual,
+  [manual/SimplArchive-Messenger-Module-Manual.pdf](manual/SimplArchive-Messenger-Module-Manual.pdf), says what the
+  server can and cannot see.
+- Next: the Messages tile in the SimplArchive phone app, then backup and restore.
 
 ## Building
 
