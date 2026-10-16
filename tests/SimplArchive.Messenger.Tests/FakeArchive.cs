@@ -131,3 +131,25 @@ internal sealed class FakeCaller(Guid tenantId) : IModuleCallerContext
     public Task<ModuleCallerIdentity?> GetIdentityAsync(CancellationToken cancellationToken = default) =>
         Task.FromResult(UserId is { } id && People.TryGetValue(id, out var p) ? new ModuleCallerIdentity(p.Name, p.Email) : null);
 }
+
+/// <summary>The core's notices, recorded: who was signalled about what, and whose signals were cleared.</summary>
+internal sealed class FakeNotices : IModuleNotices
+{
+    public List<ModuleSignal> Signals { get; } = [];
+
+    public List<(Guid User, Guid Document)> Cleared { get; } = [];
+
+    public Task<bool> QueueAsync(ModuleNotice notice, CancellationToken cancellationToken = default) => Task.FromResult(true);
+
+    public Task SignalAsync(ModuleSignal signal, CancellationToken cancellationToken = default)
+    {
+        Signals.Add(signal);
+        return Task.CompletedTask;
+    }
+
+    public Task ClearSignalsAsync(Guid recipientUserId, Guid documentId, CancellationToken cancellationToken = default)
+    {
+        Cleared.Add((recipientUserId, documentId));
+        return Task.CompletedTask;
+    }
+}

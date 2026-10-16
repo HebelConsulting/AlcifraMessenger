@@ -1,5 +1,6 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using SimplArchive.Messenger.ReadModel;
 using SimplArchive.ModuleAbi;
 
@@ -14,6 +15,7 @@ public sealed class ConversationTests : IDisposable
     private readonly MessengerReadModelContext _db;
     private readonly FakeArchive _archive = new();
     private readonly FakeCaller _caller = new(Guid.NewGuid());
+    private readonly FakeNotices _notices = new();
     private readonly Conversations _conversations;
     private readonly Messages _messages;
     private readonly Files _files;
@@ -40,7 +42,7 @@ public sealed class ConversationTests : IDisposable
 
         _conversations = new Conversations(_db, _archive, _caller);
         _files = new Files(_archive, _conversations);
-        _messages = new Messages(_db, _conversations, _files);
+        _messages = new Messages(_db, _conversations, _files, _notices, NullLogger<Messages>.Instance);
     }
 
     public void Dispose()
@@ -186,6 +188,21 @@ public sealed class ConversationTests : IDisposable
 
         As(_anna);
         Assert.Equal(2, (await _messages.PageAsync(id, null, 50, default)).Count);   // still there for Anna
+    }
+
+    [Fact]
+    public async Task Sending_signals_everyone_but_the_sender_with_nothing_of_the_message_and_reading_clears_it()
+    {
+        As(_anna);
+        var id = await _conversations.CreateGroupAsync("Team", [Key(_anna), Key(_tom), Key(_eve)], default);
+        await _messages.SendAsync(id, Guid.NewGuid(), 1, [9], null, null, default);
+
+        Assert.Equal(new[] { _tom, _eve }.Order(), _notices.Signals.Select(s => s.RecipientUserId).Order());
+        Assert.All(_notices.Signals, s => Assert.Equal((id, "New messages", "Messenger"), (s.DocumentId, s.Title, s.Body)));
+
+        As(_tom);
+        await _messages.MarkReadAsync(id, DateTimeOffset.UtcNow, default);
+        Assert.Equal([(_tom, id)], _notices.Cleared);
     }
 
     [Fact]

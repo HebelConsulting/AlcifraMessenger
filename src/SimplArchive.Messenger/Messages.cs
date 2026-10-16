@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using SimplArchive.Messenger.ReadModel;
+using SimplArchive.ModuleAbi;
 
 namespace SimplArchive.Messenger;
 
@@ -7,8 +9,14 @@ namespace SimplArchive.Messenger;
 /// A conversation's messages: sealed text a member posts, edits or deletes, read page by page. The server checks that
 /// the sender is a member, that the ciphertext is under the current epoch, and that only the sender changes a message.
 /// </summary>
-public sealed class Messages(MessengerReadModelContext db, Conversations conversations, Files files)
+public sealed class Messages(
+    MessengerReadModelContext db, Conversations conversations, Files files, IModuleNotices notices, ILogger<Messages> logger)
 {
+    /// <summary>What a member's phone shows: no sender and no text, because it reaches a lock screen.</summary>
+    public const string SignalTitle = "New messages";
+
+    public const string SignalBody = "Messenger";
+
     /// <summary>A page of messages, oldest first, after <paramref name="after"/> (exclusive); hidden-for-me left out.</summary>
     public async Task<IReadOnlyList<Message>> PageAsync(Guid conversationId, Guid? after, int limit, CancellationToken cancellationToken)
     {
@@ -68,7 +76,25 @@ public sealed class Messages(MessengerReadModelContext db, Conversations convers
         };
         db.Messages.Add(message);
         await db.SaveChangesAsync(cancellationToken);
+        await SignalOthersAsync(view, cancellationToken);
         return message;
+    }
+
+    // After the message is stored: a signal that fails must not make a sent message look unsent, so it is logged, not
+    // thrown. The core folds repeats into the member's unread signal, so a burst pushes their phone once.
+    private async Task SignalOthersAsync(Conversations.View view, CancellationToken cancellationToken)
+    {
+        foreach (var member in view.Members.Where(m => m != view.Me))
+        {
+            try
+            {
+                await notices.SignalAsync(new ModuleSignal(member, view.Id, SignalTitle, SignalBody), cancellationToken);
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                logger.LogWarning(exception, "Could not signal member {UserId} about conversation {ConversationId}", member, view.Id);
+            }
+        }
     }
 
     /// <summary>The sender replaces the text, under the current epoch, provided nobody changed it since they read it.</summary>
@@ -133,6 +159,7 @@ public sealed class Messages(MessengerReadModelContext db, Conversations convers
         }
 
         await db.SaveChangesAsync(cancellationToken);
+        await notices.ClearSignalsAsync(me, conversationId, cancellationToken);   // caught up: the next message pushes again
     }
 
     private async Task<(Message Message, Conversations.View View)> OwnAsync(Guid conversationId, Guid messageId, Guid? ifMatch, CancellationToken cancellationToken)
