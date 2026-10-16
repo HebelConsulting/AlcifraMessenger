@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The screens' arithmetic and texts, on any machine: the net10.0 build of the Views project, no device. -->
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <UseMaui>true</UseMaui>
+    <SingleProject>false</SingleProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+    <Using Include="Xunit" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\SimplArchive.Messenger.Views\SimplArchive.Messenger.Views.csproj" />
+  </ItemGroup>
+</Project>

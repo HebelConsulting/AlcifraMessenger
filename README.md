@@ -26,13 +26,17 @@ arrives slice by slice.
   markers, sealed files, and a "new messages" notification that carries nothing of the message. Its manual,
   [manual/SimplArchive-Messenger-Module-Manual.pdf](manual/SimplArchive-Messenger-Module-Manual.pdf), says what the
   server can and cannot see.
-- Next: the Messages tile in the SimplArchive phone app, then backup and restore.
+- **Screens, `SimplArchive.Messenger.Views`**: the conversation list, the thread (bubbles, replies, edit and delete,
+  leaving a group) and the people picker, code-only .NET MAUI for Android, in English, German, Italian and Spanish.
+- Next: the Messages tile in the SimplArchive phone app hosts the screens; then group management, files and backup.
 
 ## Building
 
-Everything this repository needs is on nuget.org, so a build needs no account or token:
+Everything this repository needs is on nuget.org, so a build needs no account or token. The screens are .NET MAUI for
+Android, so a build needs the workload and an Android SDK and JDK (found through `ANDROID_HOME` and `JAVA_HOME`):
 
 ```bash
+dotnet workload install maui-android
 dotnet build SimplArchiveMessenger.slnx
 dotnet test SimplArchiveMessenger.slnx
 ```

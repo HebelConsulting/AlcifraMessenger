@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The Messenger's screens: the conversation list, the thread and the people picker, code-only MAUI. Hosted by the
+       SimplArchive app's Messages tile and by the standalone app; everything they do is ChatSession's. Android now,
+       iOS when the iPhone build starts (owner, 2026-10-16). -->
+  <PropertyGroup>
+    <!-- Plain net10.0 too, so the texts and the view logic are tested on any machine. -->
+    <TargetFrameworks>net10.0;net10.0-android</TargetFrameworks>
+    <TargetFramework />
+    <UseMaui>true</UseMaui>
+    <SingleProject>false</SingleProject>
+    <SupportedOSPlatformVersion Condition="'$(TargetFramework)' == 'net10.0-android'">33.0</SupportedOSPlatformVersion>
+    <PackageId>SimplArchive.Messenger.Views</PackageId>
+    <Version>0.1.0</Version>
+    <Description>The SimplArchive Messenger's screens for a cross-platform app: conversations, the thread and the people picker.</Description>
+    <Authors>Hebel Consulting</Authors>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/HebelConsulting/SimplArchiveMessenger</RepositoryUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Maui.Controls" Version="10.0.110" />
+    <None Include="README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\SimplArchive.Messenger.Client\SimplArchive.Messenger.Client.csproj" />
+  </ItemGroup>
+</Project>
