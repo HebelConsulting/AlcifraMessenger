@@ -115,6 +115,7 @@ public sealed class WireTests : IAsyncDisposable
         var chat = await api.OpenDirectAsync(list, tom, [new ClientKey(_anna, [1]), new ClientKey(_tom, [2])]);
         Assert.True(chat.IsDirect);
         Assert.Equal([1], chat.MyKey);
+        Assert.Equal("Tom", chat.CounterpartName);
 
         var key = ConversationKeys.NewKey();
         var id = Guid.NewGuid();
@@ -152,6 +153,7 @@ public sealed class WireTests : IAsyncDisposable
         Assert.True(group.CanManageMembers);
         var tomAsMember = group.Members.Single(m => m.UserId == _tom);
         Assert.True(tomAsMember.Offers("make-admin"));
+        Assert.Equal("Tom", tomAsMember.DisplayName);
         await api.MakeAdminAsync(tomAsMember);
         Assert.True((await api.RefreshAsync(group)).Members.Single(m => m.UserId == _tom).IsAdmin);
 
@@ -161,6 +163,16 @@ public sealed class WireTests : IAsyncDisposable
         var id = Guid.NewGuid();
         var withFile = await api.SendAsync(page, id, group.Epoch, [9], attachmentDocumentId: file.DocumentId);
         Assert.Equal(sealedFile, await api.DownloadFileAsync(withFile));   // through the redirect, from the store
+
+        // After a removal the new epoch's key joins the old one, so older messages still open.
+        var eve = Guid.NewGuid();
+        _archive.Users.Add(new ModuleUser(eve, "Eve", "eve@x.io"));
+        _archive.Certificates[eve] = ["pem"];
+        await api.AddMemberAsync(group, new ClientKey(eve, [3]));
+        group = await api.RefreshAsync(group);
+        await api.RemoveMemberAsync(group.Members.Single(m => m.UserId == eve), [new ClientKey(_anna, [4]), new ClientKey(_tom, [5])]);
+        group = await api.RefreshAsync(group);
+        Assert.Equal([(1, (byte)1), (2, (byte)4)], group.MyKeys.Select(k => (k.Epoch, k.Key.Single())));
 
         // A refusal arrives with the server's own code.
         var refusal = await Assert.ThrowsAsync<MessengerApiException>(() => api.SendAsync(page, Guid.NewGuid(), group.Epoch + 1, [9]));

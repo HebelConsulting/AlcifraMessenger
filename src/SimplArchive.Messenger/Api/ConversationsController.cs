@@ -112,12 +112,15 @@ public sealed class ConversationsController(Conversations conversations, Message
             CounterpartUserId = view.CounterpartUserId,
             Epoch = view.Epoch,
             MyKey = view.MyKey,
+            MyKeys = [.. view.MyKeys.OrderBy(k => k.Key).Select(k => new EpochKeyResource { Epoch = k.Key, Key = k.Value })],
+            CounterpartName = view.CounterpartUserId is { } counterpart ? view.Names.GetValueOrDefault(counterpart) : null,
             // Each member carries the address that removes them; the caller's own is how they leave. A one-to-one chat
             // has neither: it stays between two people.
             Members = [.. view.Members.Select(m => new MemberResource
             {
                 UserId = m,
                 IsAdmin = view.AdminIds.Contains(m),
+                DisplayName = view.Names.GetValueOrDefault(m, string.Empty),
                 Links = view.IsDirect ? [] :
                 [
                     .. view.IAmAdmin || m == view.Me ? [new Link("remove", $"{self}/members/{m}", "DELETE")] : Array.Empty<Link>(),
