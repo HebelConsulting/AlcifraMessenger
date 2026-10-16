@@ -111,6 +111,31 @@ public sealed class ConversationTests : IDisposable
     }
 
     [Fact]
+    public async Task An_administrator_makes_others_administrators_and_a_group_always_keeps_one()
+    {
+        As(_anna);
+        var id = await _conversations.CreateGroupAsync("Team", [Key(_anna), Key(_tom), Key(_eve)], default);
+        Assert.Equal([_anna], (await _conversations.MemberViewAsync(id, default)).AdminIds);
+
+        await Assert.ThrowsAsync<ModuleApiException>(() => _conversations.SetAdminAsync(id, _anna, admin: false, default));   // the last one
+        await Assert.ThrowsAsync<ModuleApiException>(() => _conversations.RemoveMemberAsync(id, _anna, [Key(_tom), Key(_eve)], default));
+
+        As(_tom);   // not an administrator
+        await Assert.ThrowsAsync<ModuleApiException>(() => _conversations.SetAdminAsync(id, _eve, admin: true, default));
+
+        As(_anna);
+        await _conversations.SetAdminAsync(id, _tom, admin: true, default);
+        Assert.Equal(new[] { _anna, _tom }.Order(), (await _conversations.MemberViewAsync(id, default)).AdminIds.Order());
+        Assert.Equal(["anna@x.io", "tom@x.io"], _archive.Documents[id].FieldLists[MessengerMasks.AdminsField]);   // what the archive shows
+
+        await _conversations.RemoveMemberAsync(id, _anna, [Key(_tom), Key(_eve)], default);   // now she may leave
+        As(_tom);
+        var view = await _conversations.MemberViewAsync(id, default);
+        Assert.Equal([_tom], view.AdminIds);
+        Assert.Equal(["tom@x.io"], view.Admins);
+    }
+
+    [Fact]
     public async Task A_joiner_reads_from_the_current_epoch_on()
     {
         As(_anna);

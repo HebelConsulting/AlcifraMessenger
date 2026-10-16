@@ -27,6 +27,8 @@ public sealed class ConversationResource : HypermediaResource
 public sealed class MemberResource : HypermediaResource
 {
     public Guid UserId { get; set; }
+
+    public bool IsAdmin { get; set; }
 }
 
 public sealed class ConversationListResource : HypermediaResource

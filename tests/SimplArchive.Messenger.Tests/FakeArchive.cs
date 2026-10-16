@@ -68,6 +68,9 @@ internal sealed class FakeArchive : IModuleArchiveFacade
         Task.FromResult<IReadOnlyList<ModuleUser>>([.. Users.Where(u => Certificates.ContainsKey(u.Id)
             && (u.Email.Contains(term, StringComparison.OrdinalIgnoreCase) || u.DisplayName.Contains(term, StringComparison.OrdinalIgnoreCase))).Take(limit)]);
 
+    public Task<ModuleUser?> GetUserAsync(Guid userId, CancellationToken cancellationToken = default) =>
+        Task.FromResult(Users.FirstOrDefault(u => u.Id == userId));
+
     public Task<IReadOnlyList<ReaderCertificate>> GetUserCertificatesAsync(Guid userId, CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlyList<ReaderCertificate>>([.. Certificates.GetValueOrDefault(userId, []).Select(p => new ReaderCertificate(p, "card", DateTimeOffset.MaxValue))]);
 

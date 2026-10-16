@@ -77,6 +77,21 @@ public sealed class ConversationsController(Conversations conversations, Message
         return NoContent();
     }
 
+    /// <summary>An administrator makes a member an administrator (PUT) or takes it back (DELETE).</summary>
+    [HttpPut("{id:guid}/admins/{userId:guid}")]
+    public async Task<IActionResult> MakeAdmin(Guid id, Guid userId, CancellationToken cancellationToken)
+    {
+        await conversations.SetAdminAsync(id, userId, admin: true, cancellationToken);
+        return NoContent();
+    }
+
+    [HttpDelete("{id:guid}/admins/{userId:guid}")]
+    public async Task<IActionResult> RevokeAdmin(Guid id, Guid userId, CancellationToken cancellationToken)
+    {
+        await conversations.SetAdminAsync(id, userId, admin: false, cancellationToken);
+        return NoContent();
+    }
+
     [HttpPut("{id:guid}/receipt")]
     public async Task<IActionResult> MarkRead(Guid id, [FromBody] ReceiptRequest request, CancellationToken cancellationToken)
     {
@@ -102,7 +117,15 @@ public sealed class ConversationsController(Conversations conversations, Message
             Members = [.. view.Members.Select(m => new MemberResource
             {
                 UserId = m,
-                Links = view.IsDirect || !(view.IAmAdmin || m == view.Me) ? [] : [new Link("remove", $"{self}/members/{m}", "DELETE")],
+                IsAdmin = view.AdminIds.Contains(m),
+                Links = view.IsDirect ? [] :
+                [
+                    .. view.IAmAdmin || m == view.Me ? [new Link("remove", $"{self}/members/{m}", "DELETE")] : Array.Empty<Link>(),
+                    // A state pair, one at a time: the address is the same, the method says which.
+                    .. !view.IAmAdmin ? Array.Empty<Link>()
+                        : view.AdminIds.Contains(m) ? [new Link("revoke-admin", $"{self}/admins/{m}", "DELETE")]
+                        : [new Link("make-admin", $"{self}/admins/{m}", "PUT")],
+                ],
             })],
             Admins = [.. view.Admins],
             Unread = view.Unread,
