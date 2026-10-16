@@ -46,7 +46,17 @@ public sealed class MessengerModule : IIndustryModule
 
     public IReadOnlyList<ModuleReadModelSet> ReadModels { get; } = [new ModuleReadModelSet(typeof(MessengerReadModelContext))];
 
+    /// <summary>The Messenger's entries into the hypermedia graph: a client's only way to its addresses.</summary>
+    public IReadOnlyList<ModuleRootLink> RootLinks { get; } =
+    [
+        new("messenger:conversations", "/" + Api.ConversationsController.Base, "GET"),
+        new("messenger:people", "/" + Api.PeopleController.Base, "GET"),
+    ];
+
     public void ConfigureServices(IServiceCollection services)
     {
+        // Scoped: they depend on the read model and the facade, which are per request.
+        services.AddScoped<Conversations>();
+        services.AddScoped<Messages>();
     }
 }

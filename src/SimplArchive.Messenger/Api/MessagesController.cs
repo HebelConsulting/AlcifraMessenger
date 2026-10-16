@@ -1,0 +1,98 @@
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using SimplArchive.Messenger.ReadModel;
+using SimplArchive.ModuleAbi;
+
+namespace SimplArchive.Messenger.Api;
+
+/// <summary>A conversation's messages, followed from its <c>messages</c> link. Each message carries its own addresses.</summary>
+[ApiController]
+[Authorize]
+[Route(ConversationsController.Base + "/{conversationId:guid}/messages")]
+public sealed class MessagesController(Messages messages) : ControllerBase
+{
+    /// <summary>A page, oldest first; <c>next</c> continues after its last message.</summary>
+    [HttpGet]
+    public async Task<ActionResult<MessagePageResource>> Page(Guid conversationId, [FromQuery] Guid? after, [FromQuery] int limit = 50, CancellationToken cancellationToken = default)
+    {
+        var page = await messages.PageAsync(conversationId, after, limit, cancellationToken);
+        var self = Self(conversationId);
+        return new MessagePageResource
+        {
+            Items = [.. page.Select(m => Resource(conversationId, m))],
+            Links =
+            [
+                new Link("self", self, "GET"),
+                new Link("send", self, "POST"),
+                .. page.Count > 0 ? [new Link("next", $"{self}?after={page[^1].Id}&limit={limit}", "GET")] : Array.Empty<Link>(),
+            ],
+        };
+    }
+
+    // Standing convention: every GET has its own HEAD.
+    [HttpHead]
+    public async Task<IActionResult> Head(Guid conversationId, CancellationToken cancellationToken)
+    {
+        await messages.PageAsync(conversationId, null, 1, cancellationToken);
+        return NoContent();
+    }
+
+    [HttpPost]
+    public async Task<ActionResult<MessageResource>> Send(Guid conversationId, [FromBody] SendRequest request, CancellationToken cancellationToken)
+    {
+        var message = await messages.SendAsync(conversationId, request.Id, request.Epoch, request.Ciphertext, request.ReplyToId,
+            request.AttachmentDocumentId, cancellationToken);
+        return Created($"{Self(conversationId)}/{message.Id}", Resource(conversationId, message));
+    }
+
+    /// <summary>Edit your own message: the whole new ciphertext, with the If-Match of the version you read.</summary>
+    [HttpPut("{messageId:guid}")]
+    public async Task<ActionResult<MessageResource>> Edit(Guid conversationId, Guid messageId, [FromBody] EditRequest request, CancellationToken cancellationToken)
+    {
+        var message = await messages.EditAsync(conversationId, messageId, IfMatch(), request.Epoch, request.Ciphertext, cancellationToken);
+        Response.Headers.ETag = Tag(message);
+        return Resource(conversationId, message);
+    }
+
+    /// <summary>Delete your own message for everyone, with the If-Match of the version you read.</summary>
+    [HttpDelete("{messageId:guid}")]
+    public async Task<IActionResult> Delete(Guid conversationId, Guid messageId, CancellationToken cancellationToken)
+    {
+        await messages.DeleteForEveryoneAsync(conversationId, messageId, IfMatch(), cancellationToken);
+        return NoContent();
+    }
+
+    /// <summary>Delete for me: the message is hidden from the caller only.</summary>
+    [HttpPut("{messageId:guid}/hidden")]
+    public async Task<IActionResult> Hide(Guid conversationId, Guid messageId, CancellationToken cancellationToken)
+    {
+        await messages.HideForMeAsync(conversationId, messageId, cancellationToken);
+        return NoContent();
+    }
+
+    private Guid? IfMatch() =>
+        Request.Headers.IfMatch.ToString().Trim('"') is { Length: > 0 } raw && Guid.TryParse(raw, out var token) ? token : null;
+
+    private static string Self(Guid conversationId) => $"/{ConversationsController.Base}/{conversationId}/messages";
+
+    private static string Tag(Message message) => $"\"{message.ConcurrencyToken}\"";
+
+    private static MessageResource Resource(Guid conversationId, Message m)
+    {
+        var self = $"{Self(conversationId)}/{m.Id}";
+        return new MessageResource
+        {
+            Id = m.Id,
+            Epoch = m.Epoch,
+            SenderUserId = m.SenderUserId,
+            SentAt = m.SentAt,
+            EditedAt = m.EditedAt,
+            DeletedAt = m.DeletedAt,
+            ReplyToId = m.ReplyToId,
+            AttachmentDocumentId = m.AttachmentDocumentId,
+            Ciphertext = m.Ciphertext,
+            ETag = Tag(m),
+            Links = [new Link("edit", self, "PUT"), new Link("delete", self, "DELETE"), new Link("hide", $"{self}/hidden", "PUT")],
+        };
+    }
+}
