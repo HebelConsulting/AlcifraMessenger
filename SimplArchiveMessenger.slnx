@@ -2,9 +2,11 @@
   <Folder Name="/src/">
     <Project Path="src/SimplArchive.Keys/SimplArchive.Keys.csproj" />
     <Project Path="src/SimplArchive.Messenger/SimplArchive.Messenger.csproj" />
+    <Project Path="src/SimplArchive.Messenger.Client/SimplArchive.Messenger.Client.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/SimplArchive.Keys.Tests/SimplArchive.Keys.Tests.csproj" />
+    <Project Path="tests/SimplArchive.Messenger.Client.Tests/SimplArchive.Messenger.Client.Tests.csproj" />
     <Project Path="tests/SimplArchive.Messenger.Tests/SimplArchive.Messenger.Tests.csproj" />
   </Folder>
 </Solution>

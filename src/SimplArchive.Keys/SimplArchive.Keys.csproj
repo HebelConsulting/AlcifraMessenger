@@ -17,6 +17,8 @@
     <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
     <None Include="README.md" Pack="true" PackagePath="/" />
     <InternalsVisibleTo Include="SimplArchive.Keys.Tests" />
+    <!-- The Messenger client tests open keys on the same simulated card, which builds its answers with these helpers. -->
+    <InternalsVisibleTo Include="SimplArchive.Messenger.Client.Tests" />
   </ItemGroup>
 
 </Project>
