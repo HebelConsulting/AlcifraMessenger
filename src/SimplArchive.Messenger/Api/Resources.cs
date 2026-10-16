@@ -15,6 +15,12 @@ public sealed class ConversationResource : HypermediaResource
     /// <summary>The caller's wrapped copy of the current epoch's conversation key, sealed to their certificates.</summary>
     public byte[] MyKey { get; set; } = [];
 
+    /// <summary>The caller's copy of every epoch's key they hold, so messages from before a removal still open.</summary>
+    public List<EpochKeyResource> MyKeys { get; set; } = [];
+
+    /// <summary>A one-to-one chat's other person, by name: the chat's title.</summary>
+    public string? CounterpartName { get; set; }
+
     public List<MemberResource> Members { get; set; } = [];
     public List<string> Admins { get; set; } = [];
     public int Unread { get; set; }
@@ -29,6 +35,17 @@ public sealed class MemberResource : HypermediaResource
     public Guid UserId { get; set; }
 
     public bool IsAdmin { get; set; }
+
+    /// <summary>The member's display name; empty for an account deactivated since.</summary>
+    public string DisplayName { get; set; } = string.Empty;
+}
+
+/// <summary>One epoch's key, as the caller's sealed copy.</summary>
+public sealed class EpochKeyResource
+{
+    public int Epoch { get; set; }
+
+    public byte[] Key { get; set; } = [];
 }
 
 public sealed class ConversationListResource : HypermediaResource

@@ -26,6 +26,12 @@ public sealed class Conversations(MessengerReadModelContext db, IModuleArchiveFa
     {
         /// <summary>The members who are administrators: the Admins field keeps e-mails, so each member is looked up once.</summary>
         public IReadOnlySet<Guid> AdminIds { get; init; } = new HashSet<Guid>();
+
+        /// <summary>Each member's display name, for the thread's senders and a one-to-one chat's title.</summary>
+        public IReadOnlyDictionary<Guid, string> Names { get; init; } = new Dictionary<Guid, string>();
+
+        /// <summary>The caller's copy of EVERY epoch's key they hold: messages from before a removal stay readable.</summary>
+        public IReadOnlyDictionary<int, byte[]> MyKeys { get; init; } = new Dictionary<int, byte[]>();
     }
 
     public Guid Me => caller.UserId ?? throw MessengerErrors.NotSignedIn();
@@ -70,17 +76,28 @@ public sealed class Conversations(MessengerReadModelContext db, IModuleArchiveFa
                 .Select(m => m.SentAt).ToListAsync(cancellationToken))
             .Count(sent => readUpTo is null || sent > readUpTo);   // DateTimeOffset compared in memory: SQLite cannot
 
+        // Each member looked up once: their name for the screens, their e-mail against the Admins field.
         var adminIds = new HashSet<Guid>();
-        if (direct is null && admins.Count > 0)
+        var names = new Dictionary<Guid, string>();
+        foreach (var member in keys.Select(k => k.UserId))
         {
-            foreach (var member in keys.Select(k => k.UserId))
+            if (await archive.GetUserAsync(member, cancellationToken) is not { } person)
             {
-                if (await archive.GetUserAsync(member, cancellationToken) is { } person && admins.Contains(person.Email, StringComparer.OrdinalIgnoreCase))
-                {
-                    adminIds.Add(member);
-                }
+                continue;   // deactivated since: still a member by key, shown without a name
+            }
+
+            names[member] = person.DisplayName;
+            if (direct is null && admins.Contains(person.Email, StringComparer.OrdinalIgnoreCase))
+            {
+                adminIds.Add(member);
             }
         }
+
+        var myKeys = (await db.EpochKeys.AsNoTracking()
+                .Where(k => k.ConversationId == conversationId && k.UserId == me)
+                .Select(k => new { k.Epoch, k.WrappedKey })
+                .ToListAsync(cancellationToken))
+            .ToDictionary(k => k.Epoch, k => k.WrappedKey);
 
         return new View(
             conversationId, direct is not null, folder?.Name ?? string.Empty,
@@ -89,6 +106,8 @@ public sealed class Conversations(MessengerReadModelContext db, IModuleArchiveFa
             myEmail is not null && admins.Contains(myEmail, StringComparer.OrdinalIgnoreCase), me)
         {
             AdminIds = adminIds,
+            Names = names,
+            MyKeys = myKeys,
         };
     }
 

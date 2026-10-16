@@ -46,6 +46,12 @@ public sealed class Conversation : Resource
     /// <summary>The caller's copy of the current epoch's key, sealed to their certificates.</summary>
     public byte[] MyKey { get; set; } = [];
 
+    /// <summary>The caller's copy of every epoch's key they hold: a message opens with the key of its own epoch.</summary>
+    public List<EpochKey> MyKeys { get; set; } = [];
+
+    /// <summary>A one-to-one chat's other person, by name: the chat's title.</summary>
+    public string? CounterpartName { get; set; }
+
     /// <summary>The members at the current epoch, each with the links the caller may follow for them.</summary>
     public List<Member> Members { get; set; } = [];
 
@@ -67,6 +73,19 @@ public sealed class Member : Resource
 
     /// <summary>The member administers the group.</summary>
     public bool IsAdmin { get; set; }
+
+    /// <summary>The member's display name; empty for an account deactivated since.</summary>
+    public string DisplayName { get; set; } = string.Empty;
+}
+
+/// <summary>The caller's sealed copy of one epoch's conversation key.</summary>
+public sealed class EpochKey
+{
+    /// <summary>The epoch.</summary>
+    public int Epoch { get; set; }
+
+    /// <summary>The key, sealed to the caller's certificates.</summary>
+    public byte[] Key { get; set; } = [];
 }
 
 /// <summary>A page of messages, oldest first, with <c>send</c> and, while there may be more, <c>next</c>.</summary>
