@@ -105,6 +105,9 @@ member holds the key of an epoch as a copy wrapped to their certificates.
   list follows.
 - *Removing someone starts a new epoch.* An administrator's device makes a new key and wraps it to the members who
   remain, so the removed member cannot read what follows.
+- *Leaving does too — made by someone who stays.* The person leaving makes no key, because they would then know it.
+  Until a remaining member's app publishes the next epoch, nothing more is sent; the app does that by itself before its
+  next message.
 - *A joining member starts at the current epoch.* They read from joining on, never the history before it.
 
 The apps say both plainly when it happens.
