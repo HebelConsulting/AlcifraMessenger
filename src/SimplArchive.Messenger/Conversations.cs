@@ -22,7 +22,11 @@ public sealed class Conversations(MessengerReadModelContext db, IModuleArchiveFa
     /// <summary>The conversation as one member sees it.</summary>
     public sealed record View(
         Guid Id, bool IsDirect, string Name, Guid? CounterpartUserId, int Epoch, byte[] MyKey,
-        IReadOnlyList<Guid> Members, IReadOnlyList<string> Admins, int Unread, bool IAmAdmin, Guid Me);
+        IReadOnlyList<Guid> Members, IReadOnlyList<string> Admins, int Unread, bool IAmAdmin, Guid Me)
+    {
+        /// <summary>The members who are administrators: the Admins field keeps e-mails, so each member is looked up once.</summary>
+        public IReadOnlySet<Guid> AdminIds { get; init; } = new HashSet<Guid>();
+    }
 
     public Guid Me => caller.UserId ?? throw MessengerErrors.NotSignedIn();
 
@@ -66,11 +70,26 @@ public sealed class Conversations(MessengerReadModelContext db, IModuleArchiveFa
                 .Select(m => m.SentAt).ToListAsync(cancellationToken))
             .Count(sent => readUpTo is null || sent > readUpTo);   // DateTimeOffset compared in memory: SQLite cannot
 
+        var adminIds = new HashSet<Guid>();
+        if (direct is null && admins.Count > 0)
+        {
+            foreach (var member in keys.Select(k => k.UserId))
+            {
+                if (await archive.GetUserAsync(member, cancellationToken) is { } person && admins.Contains(person.Email, StringComparer.OrdinalIgnoreCase))
+                {
+                    adminIds.Add(member);
+                }
+            }
+        }
+
         return new View(
             conversationId, direct is not null, folder?.Name ?? string.Empty,
             direct is null ? null : direct.UserA == me ? direct.UserB : direct.UserA,
             epoch, mine.WrappedKey, [.. keys.Select(k => k.UserId)], admins, unread,
-            myEmail is not null && admins.Contains(myEmail, StringComparer.OrdinalIgnoreCase), me);
+            myEmail is not null && admins.Contains(myEmail, StringComparer.OrdinalIgnoreCase), me)
+        {
+            AdminIds = adminIds,
+        };
     }
 
     /// <summary>
@@ -170,6 +189,41 @@ public sealed class Conversations(MessengerReadModelContext db, IModuleArchiveFa
     }
 
     /// <summary>
+    /// An administrator makes a member an administrator, or takes it back (also from themself). A group keeps at least one:
+    /// the last administrator cannot step down, nor leave while others remain, until they have made someone else one.
+    /// </summary>
+    public async Task SetAdminAsync(Guid conversationId, Guid userId, bool admin, CancellationToken cancellationToken)
+    {
+        var view = await MemberViewAsync(conversationId, cancellationToken);
+        await RequireAdminAsync(view, cancellationToken);
+        if (view.IsDirect)
+        {
+            throw MessengerErrors.Invalid("A one-to-one conversation has no administrators.");
+        }
+
+        if (!view.Members.Contains(userId))
+        {
+            throw MessengerErrors.NotAMember();
+        }
+
+        if (view.AdminIds.Contains(userId) == admin)
+        {
+            return;
+        }
+
+        var person = await archive.GetUserAsync(userId, cancellationToken) ?? throw MessengerErrors.NotAMember();
+        var admins = admin
+            ? [.. view.Admins, person.Email]
+            : view.Admins.Where(a => !a.Equals(person.Email, StringComparison.OrdinalIgnoreCase)).ToList();
+        if (admins.Count == 0)
+        {
+            throw MessengerErrors.LastAdmin();
+        }
+
+        await archive.SetFieldListAsync(conversationId, MessengerMasks.AdminsField, admins, cancellationToken);
+    }
+
+    /// <summary>
     /// <paramref name="userId"/> leaves (themself) or is removed (by an administrator). A new epoch starts, with keys for
     /// every member who remains; the last one out removes the conversation, folder and all.
     /// </summary>
@@ -207,8 +261,21 @@ public sealed class Conversations(MessengerReadModelContext db, IModuleArchiveFa
             throw MessengerErrors.KeysDoNotMatchMembers();
         }
 
+        var leavingAdmin = view.AdminIds.Contains(userId);
+        if (leavingAdmin && view.AdminIds.Count == 1 && !view.IsDirect)
+        {
+            throw MessengerErrors.LastAdmin();
+        }
+
+        var person = leavingAdmin ? await archive.GetUserAsync(userId, cancellationToken) : null;
         await archive.InTransactionAsync(async () =>
         {
+            if (person is not null)
+            {
+                await archive.SetFieldListAsync(conversationId, MessengerMasks.AdminsField,
+                    [.. view.Admins.Where(a => !a.Equals(person.Email, StringComparison.OrdinalIgnoreCase))], cancellationToken);
+            }
+
             await archive.RevokeAccessAsync(conversationId, userId, cancellationToken);
             AddEpoch(conversationId, view.Epoch + 1, nextKeys);
             await db.SaveChangesAsync(cancellationToken);

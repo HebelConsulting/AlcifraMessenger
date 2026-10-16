@@ -1,0 +1,32 @@
+# The committed manual PDF must be exactly what its source builds (manual/build.sh). It ships inside the module
+# package and the core files a new version of it whenever its bytes change (core ADR 0891), so a stale or
+# non-reproducible PDF is a product defect, not a docs nit. It had drifted behind its source once already.
+name: Manual
+on:
+  pull_request:
+    paths: ["manual/**", ".github/workflows/manual.yml"]
+  push:
+    branches: [main]
+    paths: ["manual/**", ".github/workflows/manual.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  reproducible:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0 # build.sh pins the PDF timestamp to the manual source's last commit
+      - uses: typst-community/setup-typst@48aeee7543d37f01afd1ffb27307dc277387ba13 # v4.3.1
+        with:
+          typst-version: "0.15.1" # the version the committed PDF was built with; bump both together
+      - name: Rebuild and compare
+        run: |
+          manual/build.sh "$RUNNER_TEMP/rebuilt.pdf"
+          if ! cmp -s "$RUNNER_TEMP/rebuilt.pdf" manual/SimplArchive-Messenger-Module-Manual.pdf; then
+            echo "::error::manual/SimplArchive-Messenger-Module-Manual.pdf is not what manual.typ builds. Run manual/build.sh and commit the result."
+            exit 1
+          fi
+          echo "The committed manual PDF is exactly what its source builds."

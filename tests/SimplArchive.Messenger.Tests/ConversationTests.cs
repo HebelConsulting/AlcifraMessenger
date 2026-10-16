@@ -1,5 +1,6 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using SimplArchive.Messenger.ReadModel;
 using SimplArchive.ModuleAbi;
 
@@ -14,6 +15,7 @@ public sealed class ConversationTests : IDisposable
     private readonly MessengerReadModelContext _db;
     private readonly FakeArchive _archive = new();
     private readonly FakeCaller _caller = new(Guid.NewGuid());
+    private readonly FakeNotices _notices = new();
     private readonly Conversations _conversations;
     private readonly Messages _messages;
     private readonly Files _files;
@@ -40,7 +42,7 @@ public sealed class ConversationTests : IDisposable
 
         _conversations = new Conversations(_db, _archive, _caller);
         _files = new Files(_archive, _conversations);
-        _messages = new Messages(_db, _conversations, _files);
+        _messages = new Messages(_db, _conversations, _files, _notices, NullLogger<Messages>.Instance);
     }
 
     public void Dispose()
@@ -111,6 +113,31 @@ public sealed class ConversationTests : IDisposable
     }
 
     [Fact]
+    public async Task An_administrator_makes_others_administrators_and_a_group_always_keeps_one()
+    {
+        As(_anna);
+        var id = await _conversations.CreateGroupAsync("Team", [Key(_anna), Key(_tom), Key(_eve)], default);
+        Assert.Equal([_anna], (await _conversations.MemberViewAsync(id, default)).AdminIds);
+
+        await Assert.ThrowsAsync<ModuleApiException>(() => _conversations.SetAdminAsync(id, _anna, admin: false, default));   // the last one
+        await Assert.ThrowsAsync<ModuleApiException>(() => _conversations.RemoveMemberAsync(id, _anna, [Key(_tom), Key(_eve)], default));
+
+        As(_tom);   // not an administrator
+        await Assert.ThrowsAsync<ModuleApiException>(() => _conversations.SetAdminAsync(id, _eve, admin: true, default));
+
+        As(_anna);
+        await _conversations.SetAdminAsync(id, _tom, admin: true, default);
+        Assert.Equal(new[] { _anna, _tom }.Order(), (await _conversations.MemberViewAsync(id, default)).AdminIds.Order());
+        Assert.Equal(["anna@x.io", "tom@x.io"], _archive.Documents[id].FieldLists[MessengerMasks.AdminsField]);   // what the archive shows
+
+        await _conversations.RemoveMemberAsync(id, _anna, [Key(_tom), Key(_eve)], default);   // now she may leave
+        As(_tom);
+        var view = await _conversations.MemberViewAsync(id, default);
+        Assert.Equal([_tom], view.AdminIds);
+        Assert.Equal(["tom@x.io"], view.Admins);
+    }
+
+    [Fact]
     public async Task A_joiner_reads_from_the_current_epoch_on()
     {
         As(_anna);
@@ -161,6 +188,21 @@ public sealed class ConversationTests : IDisposable
 
         As(_anna);
         Assert.Equal(2, (await _messages.PageAsync(id, null, 50, default)).Count);   // still there for Anna
+    }
+
+    [Fact]
+    public async Task Sending_signals_everyone_but_the_sender_with_nothing_of_the_message_and_reading_clears_it()
+    {
+        As(_anna);
+        var id = await _conversations.CreateGroupAsync("Team", [Key(_anna), Key(_tom), Key(_eve)], default);
+        await _messages.SendAsync(id, Guid.NewGuid(), 1, [9], null, null, default);
+
+        Assert.Equal(new[] { _tom, _eve }.Order(), _notices.Signals.Select(s => s.RecipientUserId).Order());
+        Assert.All(_notices.Signals, s => Assert.Equal((id, "New messages", "Messenger"), (s.DocumentId, s.Title, s.Body)));
+
+        As(_tom);
+        await _messages.MarkReadAsync(id, DateTimeOffset.UtcNow, default);
+        Assert.Equal([(_tom, id)], _notices.Cleared);
     }
 
     [Fact]

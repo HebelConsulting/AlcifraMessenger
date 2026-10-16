@@ -40,6 +40,9 @@ public static class MessengerErrors
     public static ModuleApiException EtagMismatch() => new("ETAG_MISMATCH", 412,
         "The message has been changed since you read it.");
 
+    public static ModuleApiException LastAdmin() => new("MESSENGER_LAST_ADMIN", 409,
+        "A group keeps at least one administrator: make someone else one first.");
+
     public static ModuleApiException Invalid(string what) => new("MESSENGER_INVALID", 400, what);
 
     public static ModuleApiException FileNotServed() => new("MESSENGER_FILE_NOT_SERVED", 409,

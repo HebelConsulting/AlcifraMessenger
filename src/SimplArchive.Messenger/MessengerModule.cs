@@ -37,6 +37,17 @@ public sealed class MessengerModule : IIndustryModule
     /// </summary>
     public bool LicensesCertificateEnrolment => true;
 
+    private const string ManualResource = "SimplArchive.Messenger.Manual.pdf";
+
+    /// <summary>
+    /// The manual this module ships (ABI 1.5): the core files it into the tenant's manuals folder, and a new version
+    /// whenever these bytes change, so a tenant reads the manual written for the code it runs.
+    /// </summary>
+    public ModuleManual? Manual { get; } = new(
+        "SimplArchive-Messenger-Module-Manual.pdf",
+        () => typeof(MessengerModule).Assembly.GetManifestResourceStream(ManualResource)
+            ?? throw new InvalidOperationException($"The module's manual is not embedded as '{ManualResource}'."));
+
     public IReadOnlyList<ModuleSetting> Settings { get; } =
     [
         new(RepositorySetting, "Where conversations are filed",

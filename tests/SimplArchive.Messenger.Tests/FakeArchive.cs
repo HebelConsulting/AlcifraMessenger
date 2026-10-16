@@ -68,6 +68,9 @@ internal sealed class FakeArchive : IModuleArchiveFacade
         Task.FromResult<IReadOnlyList<ModuleUser>>([.. Users.Where(u => Certificates.ContainsKey(u.Id)
             && (u.Email.Contains(term, StringComparison.OrdinalIgnoreCase) || u.DisplayName.Contains(term, StringComparison.OrdinalIgnoreCase))).Take(limit)]);
 
+    public Task<ModuleUser?> GetUserAsync(Guid userId, CancellationToken cancellationToken = default) =>
+        Task.FromResult(Users.FirstOrDefault(u => u.Id == userId));
+
     public Task<IReadOnlyList<ReaderCertificate>> GetUserCertificatesAsync(Guid userId, CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlyList<ReaderCertificate>>([.. Certificates.GetValueOrDefault(userId, []).Select(p => new ReaderCertificate(p, "card", DateTimeOffset.MaxValue))]);
 
@@ -127,4 +130,26 @@ internal sealed class FakeCaller(Guid tenantId) : IModuleCallerContext
 
     public Task<ModuleCallerIdentity?> GetIdentityAsync(CancellationToken cancellationToken = default) =>
         Task.FromResult(UserId is { } id && People.TryGetValue(id, out var p) ? new ModuleCallerIdentity(p.Name, p.Email) : null);
+}
+
+/// <summary>The core's notices, recorded: who was signalled about what, and whose signals were cleared.</summary>
+internal sealed class FakeNotices : IModuleNotices
+{
+    public List<ModuleSignal> Signals { get; } = [];
+
+    public List<(Guid User, Guid Document)> Cleared { get; } = [];
+
+    public Task<bool> QueueAsync(ModuleNotice notice, CancellationToken cancellationToken = default) => Task.FromResult(true);
+
+    public Task SignalAsync(ModuleSignal signal, CancellationToken cancellationToken = default)
+    {
+        Signals.Add(signal);
+        return Task.CompletedTask;
+    }
+
+    public Task ClearSignalsAsync(Guid recipientUserId, Guid documentId, CancellationToken cancellationToken = default)
+    {
+        Cleared.Add((recipientUserId, documentId));
+        return Task.CompletedTask;
+    }
 }
