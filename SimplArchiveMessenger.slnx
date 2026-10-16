@@ -1,8 +1,10 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/SimplArchive.Keys/SimplArchive.Keys.csproj" />
+    <Project Path="src/SimplArchive.Messenger/SimplArchive.Messenger.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/SimplArchive.Keys.Tests/SimplArchive.Keys.Tests.csproj" />
+    <Project Path="tests/SimplArchive.Messenger.Tests/SimplArchive.Messenger.Tests.csproj" />
   </Folder>
 </Solution>
