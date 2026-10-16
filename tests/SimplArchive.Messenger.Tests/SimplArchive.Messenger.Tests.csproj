@@ -11,11 +11,14 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.13" />
     <!-- Pinned above the version EF brings, which carries a known high-severity vulnerability (the core pins the same). -->
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.3" />
+    <!-- MIT. The real controllers in process, so the client library is tested against the wire it will meet. -->
+    <PackageReference Include="Microsoft.AspNetCore.TestHost" Version="10.0.13" />
     <Using Include="Xunit" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\SimplArchive.Messenger\SimplArchive.Messenger.csproj" />
+    <ProjectReference Include="..\..\src\SimplArchive.Messenger.Client\SimplArchive.Messenger.Client.csproj" />
   </ItemGroup>
 
 </Project>
