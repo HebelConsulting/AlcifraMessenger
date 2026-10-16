@@ -52,9 +52,9 @@ public sealed class MessengerApi(HttpClient http, HttpClient? storage = null)
     public Task<PeopleList> PeopleAsync(string term, CancellationToken cancellationToken = default) =>
         GetAsync<PeopleList>($"{Required(_people, PeopleRel).Href}?term={Uri.EscapeDataString(term)}", cancellationToken);
 
-    /// <summary>The certificates a person's conversation keys are sealed to.</summary>
-    public Task<Certificates> CertificatesAsync(Person person, CancellationToken cancellationToken = default) =>
-        GetAsync<Certificates>(Follow(person, "certificates").Href, cancellationToken);
+    /// <summary>The certificates a person's — or a member's — conversation keys are sealed to.</summary>
+    public Task<Certificates> CertificatesAsync(Resource personOrMember, CancellationToken cancellationToken = default) =>
+        GetAsync<Certificates>(Follow(personOrMember, "certificates").Href, cancellationToken);
 
     /// <summary>The one conversation with <paramref name="person"/>, created on first use with epoch 1's keys for both.</summary>
     public Task<Conversation> OpenDirectAsync(
@@ -75,9 +75,9 @@ public sealed class MessengerApi(HttpClient http, HttpClient? storage = null)
     public Task<Conversation> RefreshAsync(Conversation conversation, CancellationToken cancellationToken = default) =>
         GetAsync<Conversation>(Follow(conversation, "self").Href, cancellationToken);
 
-    /// <summary>An administrator adds a member at the current epoch.</summary>
-    public Task AddMemberAsync(Conversation conversation, WrappedKey key, CancellationToken cancellationToken = default) =>
-        SendAsync(Follow(conversation, "add-member"), new { userId = key.UserId, key = key.Key }, cancellationToken);
+    /// <summary>An administrator adds <paramref name="userId"/> by starting a new epoch, with its key for every member and the newcomer.</summary>
+    public Task AddMemberAsync(Conversation conversation, Guid userId, IReadOnlyList<WrappedKey> keys, CancellationToken cancellationToken = default) =>
+        SendAsync(Follow(conversation, "add-member"), new { userId, keys = Keys(keys) }, cancellationToken);
 
     /// <summary>An administrator removes a member, with the next epoch's keys for those who remain.</summary>
     public Task RemoveMemberAsync(Member member, IReadOnlyList<WrappedKey> nextKeys, CancellationToken cancellationToken = default) =>

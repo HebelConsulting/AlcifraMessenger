@@ -65,7 +65,7 @@ public sealed class ConversationsController(Conversations conversations, Message
     [HttpPost("{id:guid}/members")]
     public async Task<IActionResult> AddMember(Guid id, [FromBody] AddMemberRequest request, CancellationToken cancellationToken)
     {
-        await conversations.AddMemberAsync(id, new WrappedKey(request.UserId, request.Key), cancellationToken);
+        await conversations.AddMemberAsync(id, request.UserId, Keys(request.Keys), cancellationToken);
         return NoContent();
     }
 
@@ -130,11 +130,13 @@ public sealed class ConversationsController(Conversations conversations, Message
                 UserId = m,
                 IsAdmin = view.AdminIds.Contains(m),
                 DisplayName = view.Names.GetValueOrDefault(m, string.Empty),
-                Links = view.IsDirect ? [] :
+                Links =
                 [
-                    .. view.IAmAdmin || m == view.Me ? [new Link("remove", $"{self}/members/{m}", "DELETE")] : Array.Empty<Link>(),
+                    // Whose certificates a new epoch's key is sealed to: every member's, on every rekey.
+                    new Link("certificates", $"/{PeopleController.Base}/{m}/certificates", "GET"),
+                    .. view.IsDirect ? Array.Empty<Link>() : view.IAmAdmin || m == view.Me ? [new Link("remove", $"{self}/members/{m}", "DELETE")] : Array.Empty<Link>(),
                     // A state pair, one at a time: the address is the same, the method says which.
-                    .. !view.IAmAdmin ? Array.Empty<Link>()
+                    .. view.IsDirect || !view.IAmAdmin ? Array.Empty<Link>()
                         : view.AdminIds.Contains(m) ? [new Link("revoke-admin", $"{self}/admins/{m}", "DELETE")]
                         : [new Link("make-admin", $"{self}/admins/{m}", "PUT")],
                 ],

@@ -166,14 +166,19 @@ public sealed class ConversationTests : IDisposable
     }
 
     [Fact]
-    public async Task A_joiner_reads_from_the_current_epoch_on()
+    public async Task A_joiner_gets_a_new_epoch_and_sees_nothing_from_before()
     {
         As(_anna);
         var id = await _conversations.CreateGroupAsync("Team", [Key(_anna), Key(_tom)], default);
         await _conversations.RemoveMemberAsync(id, _tom, [Key(_anna)], default);   // now at epoch 2
-        await _conversations.AddMemberAsync(id, Key(_eve), default);
+        await _messages.SendAsync(id, Guid.NewGuid(), 2, [1], null, null, default);
+        await Assert.ThrowsAsync<ModuleApiException>(() => _conversations.AddMemberAsync(id, _eve, [Key(_eve)], default));   // a key for everyone
+        await _conversations.AddMemberAsync(id, _eve, [Key(_anna), Key(_eve)], default);
 
-        Assert.Equal([2], await _db.EpochKeys.Where(k => k.ConversationId == id && k.UserId == _eve).Select(k => k.Epoch).ToListAsync());
+        // A new epoch, and Eve holds only its key: nothing sent before she joined opens for her, nor is it listed.
+        Assert.Equal([3], await _db.EpochKeys.Where(k => k.ConversationId == id && k.UserId == _eve).Select(k => k.Epoch).ToListAsync());
+        As(_eve);
+        Assert.Empty(await _messages.PageAsync(id, null, 50, default));
     }
 
     [Fact]
