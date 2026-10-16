@@ -31,4 +31,11 @@
     </PackageReference>
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- The manual SHIPS IN THE MODULE (ABI 1.5, core ADR 0891): the core files it into the tenant's "SimplArchive
+         Manuals" folder on activation and at startup, as a new version whenever these bytes change. manual.yml proves
+         the committed PDF is what manual.typ builds, and ManualTests that the embedded copy is that file. -->
+    <EmbeddedResource Include="..\..\manual\SimplArchive-Messenger-Module-Manual.pdf" LogicalName="SimplArchive.Messenger.Manual.pdf" />
+  </ItemGroup>
+
 </Project>
