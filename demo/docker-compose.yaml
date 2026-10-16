@@ -1,0 +1,44 @@
+# A local SimplArchive with the Messenger module, for trying the module and walking the phone's Messages tile on an
+# emulator. NOT production: it is the core's development stack (a sibling checkout of the core) plus this module.
+# The core is expected at ../../SimplArchivePrivate; with a checkout of the public core (SimplArchive), link it there.
+#
+# The module is placed through `modules-local`, the one placeholder every api instance waits for (core ADR 0808), so
+# every instance loads it; mounting it onto `api` would give one instance the module and the other none.
+#
+# The project name is explicit: compose would derive `demo` from the directory, and other module demos use that name
+# too, which once merged two demos' volumes into one.
+name: messenger-demo
+
+include:
+  - path: ../../SimplArchivePrivate/docker-compose.yaml
+
+services:
+  modules-local:
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        # Stage, then swap: never overwrite a module assembly underneath a running host.
+        rm -rf /modules/messenger.new
+        mkdir -p /modules/messenger.new
+        cp -a /src/messenger/. /modules/messenger.new/
+        rm -rf /modules/messenger
+        mv /modules/messenger.new /modules/messenger
+        echo "messenger module installed:"
+        ls -1 /modules/messenger
+    volumes:
+      # The module's own dll only; its dependencies (the ABI, EF Core) resolve from the host.
+      - ./modules/messenger:/src/messenger:ro
+
+  # The development stack seeds a narrow setup service account when its credentials are configured (the flight-school
+  # demo's, core ADR 0894): module management, user management, and full rights on one repository. This demo uses it to
+  # activate the Messenger, enrol test certificates and configure the module — through saconsole, never by hand.
+  api:
+    environment:
+      FlightSchoolDemo__ServiceAccount__ClientId: messenger-setup
+      FlightSchoolDemo__ServiceAccount__ClientSecret: dev-messenger-setup-secret
+  api-b:
+    environment:
+      FlightSchoolDemo__ServiceAccount__ClientId: messenger-setup
+      FlightSchoolDemo__ServiceAccount__ClientSecret: dev-messenger-setup-secret
