@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SimplArchive.Keys/SimplArchive.Keys.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/SimplArchive.Keys.Tests/SimplArchive.Keys.Tests.csproj" />
+  </Folder>
+</Solution>
