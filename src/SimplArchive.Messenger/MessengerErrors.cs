@@ -41,4 +41,7 @@ public static class MessengerErrors
         "The message has been changed since you read it.");
 
     public static ModuleApiException Invalid(string what) => new("MESSENGER_INVALID", 400, what);
+
+    public static ModuleApiException FileNotServed() => new("MESSENGER_FILE_NOT_SERVED", 409,
+        "This installation does not hand out stored files directly (the strict tier), so the file cannot be downloaded here.");
 }

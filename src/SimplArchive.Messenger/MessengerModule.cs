@@ -58,5 +58,6 @@ public sealed class MessengerModule : IIndustryModule
         // Scoped: they depend on the read model and the facade, which are per request.
         services.AddScoped<Conversations>();
         services.AddScoped<Messages>();
+        services.AddScoped<Files>();
     }
 }

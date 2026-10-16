@@ -7,7 +7,7 @@ namespace SimplArchive.Messenger;
 /// A conversation's messages: sealed text a member posts, edits or deletes, read page by page. The server checks that
 /// the sender is a member, that the ciphertext is under the current epoch, and that only the sender changes a message.
 /// </summary>
-public sealed class Messages(MessengerReadModelContext db, Conversations conversations)
+public sealed class Messages(MessengerReadModelContext db, Conversations conversations, Files files)
 {
     /// <summary>A page of messages, oldest first, after <paramref name="after"/> (exclusive); hidden-for-me left out.</summary>
     public async Task<IReadOnlyList<Message>> PageAsync(Guid conversationId, Guid? after, int limit, CancellationToken cancellationToken)
@@ -47,6 +47,12 @@ public sealed class Messages(MessengerReadModelContext db, Conversations convers
             throw MessengerErrors.MessageExists();
         }
 
+        // A message may carry only a file of its own conversation, never somebody else's document.
+        if (attachmentDocumentId is { } file && !await files.BelongsAsync(conversationId, file, cancellationToken))
+        {
+            throw MessengerErrors.Invalid("The attachment is not a file of this conversation.");
+        }
+
         var message = new Message
         {
             Id = messageId,
@@ -83,8 +89,13 @@ public sealed class Messages(MessengerReadModelContext db, Conversations convers
     public async Task DeleteForEveryoneAsync(Guid conversationId, Guid messageId, Guid? ifMatch, CancellationToken cancellationToken)
     {
         var (message, _) = await OwnAsync(conversationId, messageId, ifMatch, cancellationToken);
-        (message.Ciphertext, message.DeletedAt, message.ConcurrencyToken) = ([], DateTimeOffset.UtcNow, Guid.NewGuid());
+        var attachment = message.AttachmentDocumentId;
+        (message.Ciphertext, message.DeletedAt, message.ConcurrencyToken, message.AttachmentDocumentId) = ([], DateTimeOffset.UtcNow, Guid.NewGuid(), null);
         await SaveTrackedAsync(cancellationToken);
+        if (attachment is { } file)
+        {
+            await files.DeleteForEveryoneAsync(file, cancellationToken);   // the file goes with its message, references too
+        }
     }
 
     /// <summary>Hides a message for the caller only.</summary>
@@ -98,6 +109,10 @@ public sealed class Messages(MessengerReadModelContext db, Conversations convers
         {
             db.HiddenMessages.Add(new HiddenMessage { TenantId = message.TenantId, MessageId = messageId, UserId = me });
             await db.SaveChangesAsync(cancellationToken);
+            if (message.AttachmentDocumentId is { } file)
+            {
+                await files.HideForMeAsync(conversationId, file, cancellationToken);   // my reference only
+            }
         }
     }
 

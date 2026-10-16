@@ -16,6 +16,8 @@ internal sealed class FakeArchive : IModuleArchiveFacade
     public List<ModuleUser> Users { get; } = [];
     public Dictionary<Guid, List<string>> Certificates { get; } = [];
     public Dictionary<Guid, Guid> MyMessages { get; } = [];
+    public HashSet<(Guid Target, Guid Folder)> References { get; } = [];
+    public HashSet<string> Uploads { get; } = [];
 
     public Task<ModuleDocument?> GetDocumentAsync(Guid documentId, CancellationToken cancellationToken = default) =>
         Task.FromResult(Documents.GetValueOrDefault(documentId));
@@ -58,6 +60,7 @@ internal sealed class FakeArchive : IModuleArchiveFacade
     {
         Purged.Add(documentId);
         Documents.Remove(documentId);
+        References.RemoveWhere(r => r.Target == documentId);   // the core removes every reference with its target
         return Task.CompletedTask;
     }
 
@@ -72,10 +75,36 @@ internal sealed class FakeArchive : IModuleArchiveFacade
         Task.FromResult(MyMessages.TryGetValue(userId, out var folder) ? (Guid?)folder : null);
 
     public Task<byte[]?> GetDocumentContentAsync(Guid documentId, CancellationToken cancellationToken = default) => throw Unused();
-    public Task<Guid> FileUploadAsync(string uploadId, Guid parentFolderId, Guid maskId, string name, string extension, IReadOnlyDictionary<string, string>? fields = null, Guid? replaceDocumentId = null, CancellationToken cancellationToken = default) => throw Unused();
+    public Task<ModuleUpload> BeginUploadAsync(long maxBytes, TimeSpan? lifetime = null, CancellationToken cancellationToken = default)
+    {
+        var id = Guid.NewGuid().ToString("N");
+        Uploads.Add(id);
+        return Task.FromResult(new ModuleUpload(id, new Uri($"https://storage.test/{id}"), DateTimeOffset.UtcNow.AddMinutes(15), maxBytes));
+    }
+
+    public Task<Guid> FileUploadAsync(string uploadId, Guid parentFolderId, Guid maskId, string name, string extension, IReadOnlyDictionary<string, string>? fields = null, Guid? replaceDocumentId = null, CancellationToken cancellationToken = default)
+    {
+        if (!Uploads.Remove(uploadId))
+        {
+            throw new ModuleUploadMissingException(uploadId);
+        }
+
+        return CreateDocumentAsync(parentFolderId, maskId, name + extension, fields, cancellationToken);
+    }
+
+    public Task CreateReferenceAsync(Guid targetDocumentId, Guid intoFolderId, CancellationToken cancellationToken = default)
+    {
+        References.Add((targetDocumentId, intoFolderId));
+        return Task.CompletedTask;
+    }
+
+    public Task<bool> DeleteReferenceAsync(Guid targetDocumentId, Guid folderId, CancellationToken cancellationToken = default) =>
+        Task.FromResult(References.Remove((targetDocumentId, folderId)));
+
+    public Task<Uri?> GetDocumentContentUrlAsync(Guid documentId, TimeSpan ttl, CancellationToken cancellationToken = default) =>
+        Task.FromResult<Uri?>(Documents.ContainsKey(documentId) ? new Uri($"https://storage.test/content/{documentId}") : null);
     public Task<IReadOnlyList<ModuleDocument>> GetByMaskAsync(Guid maskId, CancellationToken cancellationToken = default) => throw Unused();
     public Task SetFieldsAsync(Guid documentId, IReadOnlyDictionary<string, string> fields, CancellationToken cancellationToken = default) => throw Unused();
-    public Task CreateReferenceAsync(Guid targetDocumentId, Guid intoFolderId, CancellationToken cancellationToken = default) => throw Unused();
     public Task RenameDocumentAsync(Guid documentId, string name, CancellationToken cancellationToken = default) => throw Unused();
     public Task<Guid> StageContentAsync(Guid parentFolderId, Guid maskId, string name, byte[] content, string extension, DateTimeOffset expiresAt, IReadOnlyDictionary<string, string>? fields = null, Guid? replaceDocumentId = null, DateOnly? documentDate = null, TimeOnly? documentTime = null, CancellationToken cancellationToken = default) => throw Unused();
     public Task<Guid> CreateContentDocumentAsync(Guid parentFolderId, Guid maskId, string name, byte[] content, string extension, IReadOnlyDictionary<string, string>? fields = null, Guid? replaceDocumentId = null, DateOnly? documentDate = null, TimeOnly? documentTime = null, CancellationToken cancellationToken = default) => throw Unused();

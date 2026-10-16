@@ -16,6 +16,7 @@ public sealed class ConversationTests : IDisposable
     private readonly FakeCaller _caller = new(Guid.NewGuid());
     private readonly Conversations _conversations;
     private readonly Messages _messages;
+    private readonly Files _files;
     private readonly Guid _anna = Guid.NewGuid(), _tom = Guid.NewGuid(), _eve = Guid.NewGuid(), _nokey = Guid.NewGuid();
     private readonly Guid _repository = Guid.NewGuid();
 
@@ -38,7 +39,8 @@ public sealed class ConversationTests : IDisposable
         }
 
         _conversations = new Conversations(_db, _archive, _caller);
-        _messages = new Messages(_db, _conversations);
+        _files = new Files(_archive, _conversations);
+        _messages = new Messages(_db, _conversations, _files);
     }
 
     public void Dispose()
@@ -159,5 +161,46 @@ public sealed class ConversationTests : IDisposable
 
         As(_anna);
         Assert.Equal(2, (await _messages.PageAsync(id, null, 50, default)).Count);   // still there for Anna
+    }
+
+    [Fact]
+    public async Task A_file_lives_once_with_a_reference_for_each_person_and_goes_as_each_decides()
+    {
+        As(_anna);
+        var chat = await _conversations.OpenDirectAsync(User(_tom), [Key(_anna), Key(_tom)], default);
+        var upload = await _files.BeginAsync(chat, default);
+        var file = await _files.CompleteAsync(chat, upload.UploadId, default);
+
+        Assert.Equal(chat, _archive.Documents[file].ParentId);
+        Assert.Equal(MessengerMasks.MessageObject, _archive.Documents[file].MaskId);
+        var annasFolder = (await _conversations.ChatFolderAsync(_anna, chat, default))!.Value;
+        var tomsFolder = (await _conversations.ChatFolderAsync(_tom, chat, default))!.Value;
+        Assert.Contains((file, annasFolder), _archive.References);
+        Assert.Contains((file, tomsFolder), _archive.References);
+        Assert.NotNull(await _files.DownloadAsync(chat, file, default));
+
+        var message = await _messages.SendAsync(chat, Guid.NewGuid(), 1, [1], null, file, default);
+
+        As(_tom);   // delete for me: only Tom's reference goes
+        await _messages.HideForMeAsync(chat, message.Id, default);
+        Assert.DoesNotContain((file, tomsFolder), _archive.References);
+        Assert.Contains((file, annasFolder), _archive.References);
+
+        As(_anna);  // delete for everyone: the file goes, references with it
+        await _messages.DeleteForEveryoneAsync(chat, message.Id, message.ConcurrencyToken, default);
+        Assert.Contains(file, _archive.Purged);
+        Assert.Empty(_archive.References);
+    }
+
+    [Fact]
+    public async Task A_message_carries_only_a_file_of_its_own_conversation()
+    {
+        As(_anna);
+        var team = await _conversations.CreateGroupAsync("Team", [Key(_anna), Key(_tom)], default);
+        var other = await _conversations.CreateGroupAsync("Other", [Key(_anna), Key(_eve)], default);
+        var upload = await _files.BeginAsync(other, default);
+        var foreign = await _files.CompleteAsync(other, upload.UploadId, default);
+
+        await Assert.ThrowsAsync<ModuleApiException>(() => _messages.SendAsync(team, Guid.NewGuid(), 1, [1], null, foreign, default));
     }
 }

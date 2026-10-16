@@ -112,6 +112,7 @@ public sealed class ConversationsController(Conversations conversations, Message
                 new Link("self", self, "GET"),
                 new Link("messages", $"{self}/messages", "GET"),
                 new Link("receipt", $"{self}/receipt", "PUT"),
+                new Link("upload-file", $"{self}/files", "POST"),
                 .. !view.IsDirect && view.IAmAdmin ? [new Link("add-member", $"{self}/members", "POST")] : Array.Empty<Link>(),
             ],
         };

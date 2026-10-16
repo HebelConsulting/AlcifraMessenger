@@ -101,8 +101,8 @@ public sealed class Conversations(MessengerReadModelContext db, IModuleArchiveFa
             conversationId = await archive.CreateDocumentAsync(repository, MessengerMasks.MessageGroup, $"direct-{a:N}-{b:N}", cancellationToken: cancellationToken);
             await archive.GrantAccessAsync(conversationId, me, ModuleAccess.Read, cancellationToken);
             await archive.GrantAccessAsync(conversationId, counterpart.Id, ModuleAccess.Read, cancellationToken);
-            await PlaceInMyMessagesAsync(me, counterpart.DisplayName, counterpart.Email, cancellationToken);
-            await PlaceInMyMessagesAsync(counterpart.Id, myself.DisplayName, myself.Email ?? string.Empty, cancellationToken);
+            await PlaceInMyMessagesAsync(me, conversationId, counterpart.DisplayName, counterpart.Email, cancellationToken);
+            await PlaceInMyMessagesAsync(counterpart.Id, conversationId, myself.DisplayName, myself.Email ?? string.Empty, cancellationToken);
 
             db.DirectConversations.Add(new DirectConversation { TenantId = caller.TenantId, UserA = a, UserB = b, ConversationId = conversationId });
             AddEpoch(conversationId, 1, keys);
@@ -215,6 +215,9 @@ public sealed class Conversations(MessengerReadModelContext db, IModuleArchiveFa
         }, cancellationToken);
     }
 
+    /// <summary>The signed-in caller's name and e-mail.</summary>
+    public Task<ModuleCallerIdentity?> IdentityAsync(CancellationToken cancellationToken) => caller.GetIdentityAsync(cancellationToken);
+
     /// <summary>The caller's view, or 404: a conversation one is not in does not exist for one.</summary>
     public async Task<View> MemberViewAsync(Guid conversationId, CancellationToken cancellationToken) =>
         await ViewAsync(conversationId, cancellationToken) ?? throw MessengerErrors.NotAMember();
@@ -253,21 +256,32 @@ public sealed class Conversations(MessengerReadModelContext db, IModuleArchiveFa
 
     // "My Messages/<counterpart>": where the person finds the chat in their own space. Skipped while they have no
     // personal space yet; the folder is placed when they do.
-    private async Task PlaceInMyMessagesAsync(Guid userId, string counterpartName, string counterpartEmail, CancellationToken cancellationToken)
+    private async Task PlaceInMyMessagesAsync(Guid userId, Guid conversationId, string counterpartName, string counterpartEmail, CancellationToken cancellationToken)
     {
-        if (await archive.GetPersonalSpaceFolderAsync(userId, MessengerMasks.Messages, cancellationToken) is not { } myMessages)
-        {
-            return;
-        }
-
-        var existing = await archive.GetChildrenAsync(myMessages, MessengerMasks.MessageUser, cancellationToken);
-        if (existing.Any(f => string.Equals(f.Fields.GetValueOrDefault(MessengerMasks.CounterpartField), counterpartEmail, StringComparison.OrdinalIgnoreCase)))
+        if (await archive.GetPersonalSpaceFolderAsync(userId, MessengerMasks.Messages, cancellationToken) is not { } myMessages
+            || await ChatFolderAsync(userId, conversationId, cancellationToken) is not null)
         {
             return;
         }
 
         await archive.CreateDocumentAsync(myMessages, MessengerMasks.MessageUser, counterpartName,
-            new Dictionary<string, string> { [MessengerMasks.CounterpartField] = counterpartEmail }, cancellationToken);
+            new Dictionary<string, string>
+            {
+                [MessengerMasks.CounterpartField] = counterpartEmail,
+                [MessengerMasks.ConversationField] = conversationId.ToString(),
+            }, cancellationToken);
+    }
+
+    /// <summary>A member's "My Messages/&lt;counterpart&gt;" folder of a one-to-one conversation, or null.</summary>
+    public async Task<Guid?> ChatFolderAsync(Guid userId, Guid conversationId, CancellationToken cancellationToken)
+    {
+        if (await archive.GetPersonalSpaceFolderAsync(userId, MessengerMasks.Messages, cancellationToken) is not { } myMessages)
+        {
+            return null;
+        }
+
+        return (await archive.GetChildrenAsync(myMessages, MessengerMasks.MessageUser, cancellationToken))
+            .FirstOrDefault(f => f.Fields.GetValueOrDefault(MessengerMasks.ConversationField) == conversationId.ToString())?.Id;
     }
 
     private async Task<Guid> RepositoryAsync(CancellationToken cancellationToken) =>

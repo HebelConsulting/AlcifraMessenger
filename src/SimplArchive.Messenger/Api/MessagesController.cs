@@ -92,7 +92,15 @@ public sealed class MessagesController(Messages messages) : ControllerBase
             AttachmentDocumentId = m.AttachmentDocumentId,
             Ciphertext = m.Ciphertext,
             ETag = Tag(m),
-            Links = [new Link("edit", self, "PUT"), new Link("delete", self, "DELETE"), new Link("hide", $"{self}/hidden", "PUT")],
+            Links =
+            [
+                new Link("edit", self, "PUT"),
+                new Link("delete", self, "DELETE"),
+                new Link("hide", $"{self}/hidden", "PUT"),
+                .. m.AttachmentDocumentId is { } file
+                    ? [new Link("attachment", $"/{ConversationsController.Base}/{conversationId}/files/{file}", "GET")]
+                    : Array.Empty<Link>(),
+            ],
         };
     }
 }

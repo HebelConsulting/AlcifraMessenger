@@ -24,6 +24,9 @@ public static class MessengerMasks
     /// <summary>The field naming a one-to-one chat's counterpart, by e-mail.</summary>
     public const string CounterpartField = "Counterpart";
 
+    /// <summary>The field naming the conversation a person's chat folder belongs to: how the module finds it again.</summary>
+    public const string ConversationField = "Conversation";
+
     /// <summary>The field listing a group's administrators, by e-mail.</summary>
     public const string AdminsField = "Admins";
 
@@ -38,7 +41,7 @@ public static class MessengerMasks
             PersonalSpaceFolderName = "My Messages",
         },
         new(MessageUser, "Message User", IsFolderMask: true, IsBookable: false,
-            Fields: [new ModuleFieldSeed(CounterpartField, "EmailAddress")]),
+            Fields: [new ModuleFieldSeed(CounterpartField, "EmailAddress"), new ModuleFieldSeed(ConversationField, "Text")]),
         new(MessageGroup, "Message Group", IsFolderMask: true, IsBookable: false,
             Fields: [new ModuleFieldSeed(AdminsField, "EmailAddress", IsList: true)]),
         new(MessageObject, "Message Object", IsFolderMask: false, IsBookable: false,
