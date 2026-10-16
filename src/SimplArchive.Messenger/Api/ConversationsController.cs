@@ -92,6 +92,14 @@ public sealed class ConversationsController(Conversations conversations, Message
         return NoContent();
     }
 
+    /// <summary>After somebody left, a remaining member publishes the next epoch's keys.</summary>
+    [HttpPost("{id:guid}/epochs")]
+    public async Task<IActionResult> PublishEpoch(Guid id, [FromBody] PublishEpochRequest request, CancellationToken cancellationToken)
+    {
+        await conversations.PublishEpochAsync(id, Keys(request.Keys), cancellationToken);
+        return NoContent();
+    }
+
     [HttpPut("{id:guid}/receipt")]
     public async Task<IActionResult> MarkRead(Guid id, [FromBody] ReceiptRequest request, CancellationToken cancellationToken)
     {
@@ -114,6 +122,7 @@ public sealed class ConversationsController(Conversations conversations, Message
             MyKey = view.MyKey,
             MyKeys = [.. view.MyKeys.OrderBy(k => k.Key).Select(k => new EpochKeyResource { Epoch = k.Key, Key = k.Value })],
             CounterpartName = view.CounterpartUserId is { } counterpart ? view.Names.GetValueOrDefault(counterpart) : null,
+            NeedsNewEpoch = view.NeedsNewEpoch,
             // Each member carries the address that removes them; the caller's own is how they leave. A one-to-one chat
             // has neither: it stays between two people.
             Members = [.. view.Members.Select(m => new MemberResource
@@ -140,6 +149,7 @@ public sealed class ConversationsController(Conversations conversations, Message
                 new Link("receipt", $"{self}/receipt", "PUT"),
                 new Link("upload-file", $"{self}/files", "POST"),
                 .. !view.IsDirect && view.IAmAdmin ? [new Link("add-member", $"{self}/members", "POST")] : Array.Empty<Link>(),
+                .. view.NeedsNewEpoch ? [new Link("publish-epoch", $"{self}/epochs", "POST")] : Array.Empty<Link>(),
             ],
         };
     }

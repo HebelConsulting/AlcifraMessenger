@@ -40,6 +40,11 @@ public sealed class Messages(
         CancellationToken cancellationToken)
     {
         var view = await conversations.MemberViewAsync(conversationId, cancellationToken);
+        if (view.NeedsNewEpoch)
+        {
+            throw MessengerErrors.RekeyNeeded();
+        }
+
         if (epoch != view.Epoch)
         {
             throw MessengerErrors.StaleEpoch(view.Epoch);
@@ -101,6 +106,11 @@ public sealed class Messages(
     public async Task<Message> EditAsync(Guid conversationId, Guid messageId, Guid? ifMatch, int epoch, byte[] ciphertext, CancellationToken cancellationToken)
     {
         var (message, view) = await OwnAsync(conversationId, messageId, ifMatch, cancellationToken);
+        if (view.NeedsNewEpoch)
+        {
+            throw MessengerErrors.RekeyNeeded();
+        }
+
         if (epoch != view.Epoch)
         {
             throw MessengerErrors.StaleEpoch(view.Epoch);

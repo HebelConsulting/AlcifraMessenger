@@ -15,7 +15,8 @@ public sealed class DirectConversation
     public Guid ConversationId { get; set; }
 }
 
-/// <summary>A key generation of a conversation; a new one whenever a member is removed. Append-only.</summary>
+/// <summary>A key generation of a conversation; a new one whenever a member is removed or leaves. Append-only, but for
+/// <see cref="ClosedAt"/>.</summary>
 public sealed class KeyEpoch
 {
     public Guid TenantId { get; set; }
@@ -23,6 +24,13 @@ public sealed class KeyEpoch
     public int Epoch { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public Guid CreatedByUserId { get; set; }
+
+    /// <summary>
+    /// When somebody LEFT under this epoch: its key is no longer for writing, because the leaver holds it. Nothing is
+    /// sent until a remaining member publishes the next epoch — never the leaver, who would then know the key the group
+    /// goes on with. Set once, never cleared; the next epoch is the answer.
+    /// </summary>
+    public DateTimeOffset? ClosedAt { get; set; }
 }
 
 /// <summary>
