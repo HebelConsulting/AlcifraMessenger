@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # One command to a local SimplArchive with the Messenger active on its Demo tenant: builds the module, brings up the
-# core's development stack with it (a sibling checkout at ../../SimplArchivePrivate), then — through saconsole as the
+# core's development stack with it (the public SimplArchive repository checked out beside this one, or wherever SIMPLARCHIVE_CORE points), then — through saconsole as the
 # seeded setup account — activates the module with a licence signed by the vendor key, grants it its repository,
 # configures it, and enrols a TEST certificate for three demo users.
 #
@@ -16,8 +16,9 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 ROOT="$(cd .. && pwd)"
-CORE="$(cd ../../SimplArchivePrivate 2>/dev/null && pwd || true)"
-[ -n "$CORE" ] || { echo "ERROR: the core checkout is not at ../../SimplArchivePrivate"; exit 1; }
+CORE="$(cd "${SIMPLARCHIVE_CORE:-../../SimplArchive}" 2>/dev/null && pwd || true)"
+[ -n "$CORE" ] || { echo "ERROR: no core checkout at ${SIMPLARCHIVE_CORE:-../../SimplArchive} (clone https://github.com/HebelConsulting/SimplArchive beside this repository, or set SIMPLARCHIVE_CORE)"; exit 1; }
+export SIMPLARCHIVE_CORE="$CORE"   # docker-compose.yaml includes the core's stack from the same place
 VENDOR_KEY="${VENDOR_KEY:-$HOME/dev/SimplArchiveFlightSchool/.local/vendor-signing-key.pem}"
 [ -f "$VENDOR_KEY" ] || { echo "ERROR: no vendor signing key at $VENDOR_KEY (set VENDOR_KEY)"; exit 1; }
 HOST=http://localhost:8080
