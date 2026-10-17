@@ -18,15 +18,20 @@ public sealed class MessengerScreens(ChatSession session, Color accent)
 
     internal Page Thread(Conversation conversation) => new ThreadPage(this, conversation);
 
-    internal Page NewChat(ConversationList list) => new PeoplePage(this, list, group: false);
+    internal Page NewChat(ConversationList list) => new PeoplePage(this, PeopleMode.Chat, list);
 
-    internal Page NewGroup(ConversationList list) => new PeoplePage(this, list, group: true);
+    internal Page NewGroup(ConversationList list) => new PeoplePage(this, PeopleMode.Group, list);
+
+    internal Page AddMember(Conversation group) => new PeoplePage(this, PeopleMode.AddMember, group: group);
+
+    internal Page Members(Conversation group) => new MembersPage(this, group);
 
     /// <summary>Shows a refusal or a failure in words a person can act on; a stale edit says so plainly.</summary>
     internal static Task ShowAsync(Page page, Exception exception) =>
         page.DisplayAlertAsync(ViewText.Get("Failed"), exception switch
         {
             MessengerApiException { Code: "ETAG_MISMATCH" } => ViewText.Get("ChangedElsewhere"),
+            MessengerApiException { Code: "MESSENGER_LAST_ADMIN" } => ViewText.Get("LastAdmin"),
             MessengerApiException refusal => refusal.Message,
             _ => exception.Message,
         }, ViewText.Get("OK"));
