@@ -22,12 +22,14 @@ public sealed class MessengerModule : IIndustryModule
     public int AbiMinorVersion => ModuleAbiVersion.Minor;
 
     /// <summary>The vendor's public licence-verification key, the one every SimplArchive module trusts. Public by nature.</summary>
-    public string LicenseVerifyKeyPem => """
-        -----BEGIN PUBLIC KEY-----
-        MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE4HulTVVq8aoiJk9nwBpT78MW5Azi
-        HuYu5r2EAzZYSCv2GR9PCVJ3vUe6YJvm60XgsrHxjJYuUF2PXV2LDFN3BA==
-        -----END PUBLIC KEY-----
-        """;
+    /// <summary>The Messenger is never licensed (owner, 2026-10-17; core ADR 0944): no key to verify a licence with.</summary>
+    public string LicenseVerifyKeyPem => string.Empty;
+
+    /// <summary>
+    /// Free and open source, wherever it runs: an administrator activates it without a licence file, and it never lapses
+    /// (ABI 1.23, core ADR 0944). The standalone start (demo/up.sh) does that by itself.
+    /// </summary>
+    public bool RequiresLicence => false;
 
     public IReadOnlyList<ModuleMaskSeed> Masks => MessengerMasks.Seeds;
 

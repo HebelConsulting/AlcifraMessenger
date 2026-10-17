@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# One command to a local SimplArchive with the Messenger active on its Demo tenant: builds the module, brings up the
-# core's development stack with it (a sibling checkout at ../../SimplArchivePrivate), then — through saconsole as the
-# seeded setup account — activates the module with a licence signed by the vendor key, grants it its repository,
-# configures it, and enrols a TEST certificate for three demo users.
+# One command to a SimplArchive with the Messenger ACTIVE on its Demo tenant — the standalone start of this repository:
+# builds the module, brings up the core's development stack with it (a sibling checkout at ../../SimplArchivePrivate,
+# or the public core linked there), then — through saconsole as the seeded setup account — activates the module (it
+# needs no licence, core ADR 0944), grants it its repository, configures it, and enrols a TEST certificate for three
+# demo users. Nothing is left for whoever runs it to switch on.
 #
 #   demo/up.sh            the stack, the Messenger active, certificates for demo@, anna@ and tom@
 #   demo/down.sh [-v]     stop it (-v drops its data)
@@ -10,16 +11,13 @@
 # Walked on an emulator (2026-10-17): the Messages tile, the list, the people picker and a new chat all work against
 # this stack; sending stops at the key dialog, which only a hardware key answers.
 #
-# Needs: Docker, the .NET SDK, python3, openssl, and the vendor signing key (VENDOR_KEY, default the flight-school
-# checkout's .local copy). The test certificates' private keys stay in demo/.local/, git-ignored; they stand in for
-# hardware keys, so they open nothing a real key would.
+# Needs: Docker, the .NET SDK, python3 and openssl. The test certificates' private keys stay in demo/.local/,
+# git-ignored; they stand in for hardware keys, so they open nothing a real key would.
 set -euo pipefail
 cd "$(dirname "$0")"
 ROOT="$(cd .. && pwd)"
 CORE="$(cd ../../SimplArchivePrivate 2>/dev/null && pwd || true)"
 [ -n "$CORE" ] || { echo "ERROR: the core checkout is not at ../../SimplArchivePrivate"; exit 1; }
-VENDOR_KEY="${VENDOR_KEY:-$HOME/dev/SimplArchiveFlightSchool/.local/vendor-signing-key.pem}"
-[ -f "$VENDOR_KEY" ] || { echo "ERROR: no vendor signing key at $VENDOR_KEY (set VENDOR_KEY)"; exit 1; }
 HOST=http://localhost:8080
 
 echo "==> Building the Messenger module…"
@@ -45,13 +43,7 @@ tenant = uuid.uuid5(uuid.UUID('5A21B5E0-DE20-4E11-9D5B-8F1C2E40D0D5'), 'tenant/D
 print(tenant if sys.argv[1] == 'tenant' else uuid.uuid5(tenant, sys.argv[1]))
 PY
 }
-TENANT_ID="$(demo_id tenant)"
 REPOSITORY="$(demo_id repository/flight-school)"   # the seeded setup account's repository: conversations go here
-ADMIN_FOLDER="$(demo_id folder/flight-school-administration)"
-
-echo "==> Signing a licence for the Messenger on the Demo tenant…"
-dotnet run --project "$CORE/tools/SimplArchive.LicenseSigner" -c Release -- sign \
-  --key "$VENDOR_KEY" --tenant "$TENANT_ID" --modules messenger --out .local/messenger-license.json
 
 echo "==> Signing in as the setup account…"
 # The secret rides in the login's own environment; the token is taken by an exact-shape match, never eval'd.
@@ -61,8 +53,7 @@ SACONSOLE_TOKEN="$(printf '%s\n' "$login_out" | sed -n "s/^export SACONSOLE_TOKE
 export SACONSOLE_TOKEN SACONSOLE_URL="$HOST"
 
 echo "==> Activating the Messenger, granting it its repository, configuring it…"
-sac module activate --licence .local/messenger-license.json --parent "$ADMIN_FOLDER" --module messenger \
-  --name "Messenger licence $(date -u +%F)"
+sac module activate --module messenger   # no licence: the Messenger needs none (core ADR 0944)
 sac acl grant "$REPOSITORY" --service-account "Module: Messenger" \
   --rights see,read-content,edit-content,edit-index-data,create-sub-items,delete,manage-permissions
 printf '%s' "$REPOSITORY" | sac module settings set messenger messenger.repositoryId --stdin
