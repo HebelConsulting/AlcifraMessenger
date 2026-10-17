@@ -55,7 +55,7 @@ public static class MessengerErrors
         "This installation does not hand out stored files directly (the strict tier), so the file cannot be downloaded here.");
 
     public static ModuleApiException ReadOnly() => new("MESSENGER_READ_ONLY", 409,
-        "This conversation was restored from a backup as history: it can be read, not continued.");
+        "This conversation is history here — restored, or one you left: it can be read, not continued.");
 
     public static ModuleApiException NotYourBackup() => new("MESSENGER_NOT_YOUR_BACKUP", 403,
         "This backup belongs to somebody else: its owner's e-mail is not yours.");

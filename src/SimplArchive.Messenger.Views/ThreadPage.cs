@@ -87,7 +87,7 @@ internal sealed class ThreadPage : ContentPage
         var bar = new VerticalStackLayout { Padding = new Thickness(16, 10), Spacing = 8 };
         bar.Add(new Label
         {
-            Text = ViewText.Get("RestoredReadOnly", conversation.RestoredFrom ?? string.Empty),
+            Text = conversation.Left ? ViewText.Get("LeftReadOnly") : ViewText.Get("RestoredReadOnly", conversation.RestoredFrom ?? string.Empty),
             FontSize = 13, TextColor = Colors.Gray, HorizontalTextAlignment = TextAlignment.Center,
         });
         if (conversation.Offers("continuation"))

@@ -104,13 +104,16 @@ When the last member leaves, the conversation is removed, its folder and files w
 Each conversation has a *conversation key*#idx("conversation key"), and a new one for every *epoch*#idx("epoch"). A
 member holds the key of an epoch as a copy wrapped to their certificates.
 
-- *Membership is the current epoch's keys.* Whoever holds a key for the current epoch is a member; the folder's access
-  list follows.
+- *Membership is the current epoch's keys.* Whoever holds a key for the current epoch, and has not left, is a member;
+  the folder's access list follows.
 - *Removing someone starts a new epoch.* An administrator's device makes a new key and wraps it to the members who
   remain, so the removed member cannot read what follows.
 - *Leaving does too — made by someone who stays.* The person leaving makes no key, because they would then know it.
   Until a remaining member's app publishes the next epoch, nothing more is sent; the app does that by itself before its
   next message.
+- *What you were in stays yours.* After leaving or being removed you keep your own keys for the stretch you were a
+  member: the conversation stays in your list, marked *left*, as history to read and to back up — and nothing sent
+  after you left, which is sealed under an epoch you hold no key for.
 - *Adding someone starts a new epoch as well.* The administrator's device makes a new key for everyone, the newcomer
   included, who therefore reads from joining on and holds nothing that opens the history before it — nor is it listed
   to them.
@@ -221,7 +224,6 @@ For those who audit it:
 // ─────────────────────────────────────────────────────────────────────────────
 = Not yet
 
-- *Restoring conversations you have left* is in preparation.
 - *Disappearing messages* are not offered.
 
 #index-page()

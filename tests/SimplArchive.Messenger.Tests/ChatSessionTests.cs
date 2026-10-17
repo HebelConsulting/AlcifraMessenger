@@ -121,6 +121,45 @@ public sealed class ChatSessionTests : IAsyncDisposable
         Assert.Equal((2, false), (forAnna.Epoch, forAnna.NeedsNewEpoch));
         Assert.Equal(["Before", "After"], await ReadAllAsync(annas, forAnna));   // the old message opens with epoch 1's key
         Assert.DoesNotContain(forAnna.Members, m => m.UserId == eve);
+
+        // Eve left: the stretch she was a member for stays hers to read, as history, and nothing after it.
+        _rig.Caller.UserId = eve;
+        var hers = Assert.Single((await _rig.Api.ConversationsAsync()).Items);
+        Assert.True(hers.Left && hers.IsReadOnly);
+        Assert.Equal(["Before"], await ReadAllAsync(SessionOf(eve), hers));
+        var (herPage, _) = await SessionOf(eve).MessagesAsync(hers);
+        Assert.Null(herPage.LinkOf("send"));                                     // history: nothing is sent into it
+        Assert.Null(hers.LinkOf("upload-file"));
+        Assert.All(hers.Members, m => Assert.Null(m.LinkOf("remove")));
+    }
+
+    [Fact]
+    public async Task A_removed_member_keeps_reading_what_was_sealed_while_they_were_in()
+    {
+        var (anna, tom) = (Person("Anna"), Person("Tom"));
+        var ina = Person("Ina");
+        await _rig.StartAsync();
+        _rig.Caller.UserId = anna;
+        await _rig.Api.DiscoverAsync();
+        var annas = SessionOf(anna);
+        var group = await annas.CreateGroupAsync(await _rig.Api.ConversationsAsync(), "Crew", (await _rig.Api.PeopleAsync("@x.io")).Items);
+        var (page, _) = await annas.MessagesAsync(group);
+        await annas.SendAsync(group, page, "While Tom is in");
+        await annas.RemoveAsync(group, group.Members.Single(m => m.UserId == tom));
+        var now = await AsAsync(anna, group);
+        var (later, _) = await annas.MessagesAsync(now);
+        await annas.SendAsync(now, later, "After Tom");
+
+        var toms = Assert.Single((await AsListOfAsync(tom)).Items);
+        Assert.True(toms.Left);
+        Assert.Equal(["While Tom is in"], await ReadAllAsync(SessionOf(tom), toms));
+        Assert.Equal(["While Tom is in", "After Tom"], await ReadAllAsync(SessionOf(ina), await AsAsync(ina, group)));
+    }
+
+    private async Task<ConversationList> AsListOfAsync(Guid person)
+    {
+        _rig.Caller.UserId = person;
+        return await _rig.Api.ConversationsAsync();
     }
 
     [Fact]

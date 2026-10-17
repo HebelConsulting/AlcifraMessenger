@@ -55,6 +55,9 @@ opens only with a key whose certificate it was sealed to. It is a zip, its entri
 A restore checks every entry against the manifest **before** it changes anything, and keeps every id: a restored
 conversation gets a new folder, but its messages still open because the conversation id and the sender ids they are
 bound to travel with them. Restoring twice adds nothing; a second member restoring the same conversation joins it.
+A backup holds every conversation the user was ever a member of, for the epochs they hold a key for — one they left
+included: leaving marks their key (`LeftAt`) rather than deleting it.
+
 Restored messages are marked: the format has no sender signatures (below), so they are as trustworthy as whoever
 restored them.
 

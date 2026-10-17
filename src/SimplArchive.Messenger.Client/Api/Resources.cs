@@ -85,6 +85,9 @@ public sealed class Conversation : Resource
     /// <summary>Archived history: readable, not continued — nothing is sent, edited or rekeyed.</summary>
     public bool IsReadOnly { get; set; }
 
+    /// <summary>The caller left (or was removed): they read the stretch they were a member, as history.</summary>
+    public bool Left { get; set; }
+
     /// <summary>The id bound into every message's associated data.</summary>
     public Guid SealedUnder => SealedUnderId == Guid.Empty ? Id : SealedUnderId;
 }
