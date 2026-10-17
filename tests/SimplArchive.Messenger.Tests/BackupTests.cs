@@ -230,6 +230,33 @@ public sealed class BackupTests : IAsyncDisposable
         Assert.True(Assert.Single((await _new.Api.ConversationsAsync()).Items).IsReadOnly);
     }
 
+    [Fact]
+    public async Task A_conversation_one_left_is_backed_up_for_the_stretch_one_was_in()
+    {
+        var (anna, tom) = (Person(_old, "Anna"), Person(_old, "Tom"));
+        await _old.StartAsync();
+        _old.Caller.UserId = anna;
+        await _old.Api.DiscoverAsync();
+        var annas = Session(_old, anna, "Anna");
+        var group = await annas.CreateGroupAsync(await _old.Api.ConversationsAsync(), "Crew", [Assert.Single((await _old.Api.PeopleAsync("tom")).Items)]);
+        var (page, _) = await annas.MessagesAsync(group);
+        await annas.SendAsync(group, page, "Before Tom left");
+        _old.Caller.UserId = tom;
+        await Session(_old, tom, "Tom").LeaveAsync(await _old.Api.RefreshAsync(group));
+        var backup = new MemoryStream();
+        Assert.Equal(new BackupSummary(1, 1, 0), await MessengerBackup.WriteAsync(_old.Api, backup, "https://old.example"));
+
+        var tomHere = Person(_new, "Tom");
+        await _new.StartAsync();
+        _new.Caller.UserId = tomHere;
+        await _new.Api.DiscoverAsync();
+        await MessengerBackup.RestoreAsync(_new.Api, Rewound(backup));
+        var restored = Assert.Single((await _new.Api.ConversationsAsync()).Items);
+        var session = Session(_new, tomHere, "Tom");
+        var (_, messages) = await session.MessagesAsync(restored);
+        Assert.Equal("Before Tom left", (await session.OpenAsync(restored, Assert.Single(messages))).Text);
+    }
+
     private static MemoryStream Rewound(MemoryStream stream)
     {
         stream.Position = 0;

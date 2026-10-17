@@ -15,7 +15,7 @@ public sealed class Files(IModuleArchiveFacade archive, Conversations conversati
     /// <summary>An address to upload the sealed file to, valid briefly.</summary>
     public async Task<ModuleUpload> BeginAsync(Guid conversationId, CancellationToken cancellationToken)
     {
-        await conversations.MemberViewAsync(conversationId, cancellationToken);
+        await RequireMayFileAsync(conversationId, cancellationToken);
         return await archive.BeginUploadAsync(MaxBytes, TimeSpan.FromMinutes(15), cancellationToken);
     }
 
@@ -26,7 +26,7 @@ public sealed class Files(IModuleArchiveFacade archive, Conversations conversati
     /// </remarks>
     public async Task<Guid> CompleteAsync(Guid conversationId, string uploadId, CancellationToken cancellationToken)
     {
-        var view = await conversations.MemberViewAsync(conversationId, cancellationToken);
+        var view = await RequireMayFileAsync(conversationId, cancellationToken);
         var sender = (await conversations.IdentityAsync(cancellationToken))?.Email ?? string.Empty;
         var documentId = Guid.Empty;
         await archive.InTransactionAsync(async () =>
@@ -57,6 +57,13 @@ public sealed class Files(IModuleArchiveFacade archive, Conversations conversati
         }
 
         return await archive.GetDocumentContentUrlAsync(documentId, TimeSpan.FromMinutes(5), cancellationToken);
+    }
+
+    // A member files a file; so does a restore, into restored history. One who left reads, and files nothing.
+    private async Task<Conversations.View> RequireMayFileAsync(Guid conversationId, CancellationToken cancellationToken)
+    {
+        var view = await conversations.MemberViewAsync(conversationId, cancellationToken);
+        return view.HasLeft ? throw MessengerErrors.ReadOnly() : view;
     }
 
     /// <summary>Whether <paramref name="documentId"/> is a file of this conversation: what a message may name.</summary>

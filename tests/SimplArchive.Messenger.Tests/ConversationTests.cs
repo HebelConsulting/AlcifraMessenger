@@ -101,8 +101,10 @@ public sealed class ConversationTests : IDisposable
         Assert.Equal(new[] { _anna, _tom }.Order(), view.Members.Order());
         Assert.DoesNotContain((id, _eve), _archive.Access);
 
-        As(_eve);   // removed: the conversation no longer exists for her
-        Assert.Null(await _conversations.ViewAsync(id, default));
+        As(_eve);   // removed: she reads her stretch as history (epoch 1 only), and changes nothing (core #1813)
+        var removed = Assert.IsType<Conversations.View>(await _conversations.ViewAsync(id, default));
+        Assert.True(removed.HasLeft && removed.IsReadOnly);
+        Assert.Equal([1], removed.MyKeys.Keys);
 
         As(_tom);
         await _conversations.RemoveMemberAsync(id, _tom, [], default);   // leaving needs no administrator, and makes no key
@@ -146,7 +148,7 @@ public sealed class ConversationTests : IDisposable
         As(_eve);
         await Assert.ThrowsAsync<ModuleApiException>(() => _conversations.RemoveMemberAsync(id, _eve, [Key(_anna), Key(_tom)], default));   // a leaver brings no key
         await _conversations.RemoveMemberAsync(id, _eve, [], default);
-        Assert.Null(await _conversations.ViewAsync(id, default));
+        Assert.True((await _conversations.ViewAsync(id, default))!.HasLeft);   // her key stays, marked: history to read
 
         As(_tom);
         var view = await _conversations.MemberViewAsync(id, default);

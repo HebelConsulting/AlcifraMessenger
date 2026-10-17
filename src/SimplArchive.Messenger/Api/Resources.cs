@@ -45,6 +45,9 @@ public sealed class ConversationResource : HypermediaResource
 
     /// <summary>Archived history: readable, not continued.</summary>
     public bool IsReadOnly { get; set; }
+
+    /// <summary>The caller left (or was removed): they read the stretch they were a member, as history.</summary>
+    public bool Left { get; set; }
 }
 
 /// <summary>A member, with the address that removes them (or, for the caller, lets them leave).</summary>

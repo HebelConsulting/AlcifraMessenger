@@ -48,8 +48,14 @@ public sealed class Conversations(MessengerReadModelContext db, IModuleArchiveFa
         /// <summary>The caller's id in a restored conversation: the one their own old messages are bound to.</summary>
         public Guid? MyOriginUserId { get; init; }
 
-        /// <summary>Archived history: nothing may be sent, edited, deleted for everyone, added or rekeyed.</summary>
-        public bool IsReadOnly => Restored?.IsReadOnly == true;
+        /// <summary>
+        /// The caller left the conversation (or was removed): they still hold their own keys for the stretch they were a
+        /// member, so they read that stretch as history and back it up (core #1813), and nothing after it.
+        /// </summary>
+        public bool HasLeft { get; init; }
+
+        /// <summary>History: nothing may be sent, edited, deleted for everyone, added, uploaded or rekeyed.</summary>
+        public bool IsReadOnly => Restored?.IsReadOnly == true || HasLeft;
 
         /// <summary>The id every message's ciphertext is bound to: the original one for a restored conversation.</summary>
         public Guid SealedUnder => Restored?.OriginConversationId ?? Id;
@@ -86,10 +92,11 @@ public sealed class Conversations(MessengerReadModelContext db, IModuleArchiveFa
         }
 
         var epoch = await CurrentEpochAsync(conversationId, cancellationToken);
-        var keys = await db.EpochKeys.Where(k => k.ConversationId == conversationId && k.Epoch == epoch).ToListAsync(cancellationToken);
+        // The members now: a key at the current epoch that its holder has not left.
+        var keys = await db.EpochKeys.Where(k => k.ConversationId == conversationId && k.Epoch == epoch && k.LeftAt == null).ToListAsync(cancellationToken);
         if (keys.FirstOrDefault(k => k.UserId == me) is not { } mine)
         {
-            return null;
+            return await LeftViewAsync(conversationId, cancellationToken);
         }
 
         var direct = await db.DirectConversations.FirstOrDefaultAsync(d => d.ConversationId == conversationId, cancellationToken);
@@ -143,6 +150,47 @@ public sealed class Conversations(MessengerReadModelContext db, IModuleArchiveFa
             MyKeys = myKeys,
             ReadUpTo = receipts.Where(r => keys.Any(k => k.UserId == r.Key)).ToDictionary(),
             NeedsNewEpoch = await db.KeyEpochs.AnyAsync(e => e.ConversationId == conversationId && e.Epoch == epoch && e.ClosedAt != null, cancellationToken),
+        };
+    }
+
+    // A conversation the caller left or was removed from (core #1813), as far as their own keys reach: the members are
+    // those of the last epoch they held a key for, the people their messages were sealed with. Null for one they never
+    // held a key of — a conversation one is not in does not exist for one.
+    private async Task<View?> LeftViewAsync(Guid conversationId, CancellationToken cancellationToken)
+    {
+        var me = Me;
+        var myKeys = (await db.EpochKeys.AsNoTracking().Where(k => k.ConversationId == conversationId && k.UserId == me)
+                .Select(k => new { k.Epoch, k.WrappedKey }).ToListAsync(cancellationToken))
+            .ToDictionary(k => k.Epoch, k => k.WrappedKey);
+        if (myKeys.Count == 0)
+        {
+            return null;
+        }
+
+        var latest = myKeys.Keys.Max();
+        var then = await db.EpochKeys.AsNoTracking().Where(k => k.ConversationId == conversationId && k.Epoch == latest)
+            .Select(k => k.UserId).ToListAsync(cancellationToken);
+        var direct = await db.DirectConversations.AsNoTracking().FirstOrDefaultAsync(d => d.ConversationId == conversationId, cancellationToken);
+        var folder = await archive.GetDocumentAsync(conversationId, cancellationToken);
+        var names = new Dictionary<Guid, string>();
+        var emails = new Dictionary<Guid, string>();
+        foreach (var member in then.Append(me).Distinct())
+        {
+            if (await archive.GetUserAsync(member, cancellationToken) is { } person)
+            {
+                (names[member], emails[member]) = (person.DisplayName, person.Email);
+            }
+        }
+
+        return new View(
+            conversationId, direct is not null, folder?.Name ?? string.Empty,
+            direct is null ? null : direct.UserA == me ? direct.UserB : direct.UserA,
+            latest, myKeys[latest], [.. then.Append(me).Distinct()], [], 0, false, me)
+        {
+            Names = names,
+            Emails = emails,
+            MyKeys = myKeys,
+            HasLeft = true,
         };
     }
 
@@ -377,8 +425,10 @@ public sealed class Conversations(MessengerReadModelContext db, IModuleArchiveFa
             if (leaving)
             {
                 // Out of the current epoch's members at once, and the epoch closed for writing until somebody who
-                // remains publishes the next.
-                db.EpochKeys.RemoveRange(db.EpochKeys.Where(k => k.ConversationId == conversationId && k.Epoch == view.Epoch && k.UserId == userId));
+                // remains publishes the next. The leaver's key STAYS, marked: what was sealed while they were in stays
+                // theirs to read and back up (core #1813); nothing after it, which goes under an epoch they hold no key of.
+                var leaverKey = await db.EpochKeys.SingleAsync(k => k.ConversationId == conversationId && k.Epoch == view.Epoch && k.UserId == userId, cancellationToken);
+                leaverKey.LeftAt = DateTimeOffset.UtcNow;
                 var current = await db.KeyEpochs.SingleAsync(e => e.ConversationId == conversationId && e.Epoch == view.Epoch, cancellationToken);
                 current.ClosedAt ??= DateTimeOffset.UtcNow;
             }

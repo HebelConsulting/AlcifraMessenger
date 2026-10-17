@@ -44,6 +44,12 @@ public sealed class EpochKey
     public int Epoch { get; set; }
     public Guid UserId { get; set; }
     public byte[] WrappedKey { get; set; } = [];
+
+    /// <summary>
+    /// When the member left under this epoch (core #1813). The key stays, so they still read what was sealed while they
+    /// were in; a member NOW is one whose key at the current epoch has none.
+    /// </summary>
+    public DateTimeOffset? LeftAt { get; set; }
 }
 
 /// <summary>

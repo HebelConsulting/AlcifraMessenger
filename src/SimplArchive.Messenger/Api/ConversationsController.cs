@@ -234,8 +234,8 @@ public sealed class ConversationsController(
                 DisplayName = view.Names.GetValueOrDefault(m, string.Empty),
                 ReadUpTo = view.ReadUpTo.TryGetValue(m, out var read) ? read : null,
                 Email = view.Emails.GetValueOrDefault(m, string.Empty),
-                // A restored conversation's members are the backup's, by their ids there: no certificates, nothing to change.
-                Links = view.Restored is not null ? [] :
+                // History — restored (its members are the backup's, by their ids there) or left — changes no member.
+                Links = view.IsReadOnly ? [] :
                 [
                     // Whose certificates a new epoch's key is sealed to: every member's, on every rekey.
                     new Link("certificates", $"/{PeopleController.Base}/{m}/certificates", "GET"),
@@ -254,13 +254,14 @@ public sealed class ConversationsController(
             Restored = view.Restored is not null,
             RestoredFrom = view.Restored?.OriginInstance,
             IsReadOnly = view.IsReadOnly,
+            Left = view.HasLeft,
             Links =
             [
                 new Link("self", self, "GET"),
                 new Link("messages", $"{self}/messages", "GET"),
                 new Link("receipt", $"{self}/receipt", "PUT"),
                 // A restore files a backup's files here too, before importing the messages that carry them.
-                new Link("upload-file", $"{self}/files", "POST"),
+                .. view.HasLeft ? Array.Empty<Link>() : [new Link("upload-file", $"{self}/files", "POST")],
                 .. view.Restored is not null ? [new Link("import", $"{self}/imports", "POST")] : Array.Empty<Link>(),
                 // GET says who is here; POST continues. One rel, the method says which (ADR 0719).
                 .. view.Restored is { IsReadOnly: true, ContinuedInConversationId: null } ? [new Link("continuation", $"{self}/continuation", "GET")] : Array.Empty<Link>(),

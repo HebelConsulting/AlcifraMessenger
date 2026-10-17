@@ -24,15 +24,13 @@ public sealed class Messages(
         var me = conversations.Me;
         var hidden = db.HiddenMessages.Where(h => h.UserId == me).Select(h => h.MessageId);
 
-        // Only from the first epoch the caller holds a key for: what came before they joined is not theirs to list. A
-        // restored conversation lists exactly the epochs the caller's backup brought: another restorer's are not theirs.
-        var firstEpoch = view.MyKeys.Count == 0 ? int.MaxValue : view.MyKeys.Keys.Min();
-        var restoredEpochs = view.Restored is null ? null : view.MyKeys.Keys.ToList();
+        // Exactly the epochs the caller holds a key for: what came before they joined, while they were away, or after they
+        // left is not theirs to list — and for a member throughout, that is simply everything since they joined.
+        var epochs = view.MyKeys.Keys.ToList();
 
         // Ordered in memory: SQLite (the tests' provider) cannot order by DateTimeOffset, and a conversation's page is small.
         var all = (await db.Messages.AsNoTracking()
-                .Where(m => m.ConversationId == conversationId && m.Epoch >= firstEpoch && !hidden.Contains(m.Id))
-                .Where(m => restoredEpochs == null || restoredEpochs.Contains(m.Epoch))
+                .Where(m => m.ConversationId == conversationId && epochs.Contains(m.Epoch) && !hidden.Contains(m.Id))
                 .ToListAsync(cancellationToken))
             .OrderBy(m => m.SentAt).ThenBy(m => m.Id)
             .ToList();

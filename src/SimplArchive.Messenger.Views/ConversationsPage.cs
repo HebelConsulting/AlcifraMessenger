@@ -96,8 +96,10 @@ internal sealed class ConversationsPage : ContentPage
             if (grid.BindingContext is Conversation c)
             {
                 title.Text = ThreadRows.Title(c);
-                kind.Text = c.IsDirect ? string.Empty : ViewText.Get("GroupMembers", c.Members.Count);
-                kind.IsVisible = !c.IsDirect;
+                // History says so in the list: one the caller left, or one restored from a backup.
+                kind.Text = c.Left ? ViewText.Get("LeftMark") : c.Restored ? ViewText.Get("RestoredMark")
+                    : c.IsDirect ? string.Empty : ViewText.Get("GroupMembers", c.Members.Count);
+                kind.IsVisible = c.Left || c.Restored || !c.IsDirect;
                 count.Text = c.Unread.ToString(System.Globalization.CultureInfo.CurrentCulture);
                 badge.IsVisible = c.Unread > 0;
             }
