@@ -18,24 +18,26 @@ public sealed class Messages(
     public const string SignalBody = "Messenger";
 
     /// <summary>A page of messages, oldest first, after <paramref name="after"/> (exclusive); hidden-for-me left out.</summary>
-    public async Task<IReadOnlyList<Message>> PageAsync(Guid conversationId, Guid? after, int limit, CancellationToken cancellationToken)
+    public async Task<(Conversations.View View, IReadOnlyList<Message> Page)> PageAsync(Guid conversationId, Guid? after, int limit, CancellationToken cancellationToken)
     {
-        await conversations.MemberViewAsync(conversationId, cancellationToken);
+        var view = await conversations.MemberViewAsync(conversationId, cancellationToken);
         var me = conversations.Me;
         var hidden = db.HiddenMessages.Where(h => h.UserId == me).Select(h => h.MessageId);
 
-        // Only from the first epoch the caller holds a key for: what came before they joined is not theirs to list.
-        var firstEpoch = await db.EpochKeys.Where(k => k.ConversationId == conversationId && k.UserId == me)
-            .MinAsync(k => (int?)k.Epoch, cancellationToken) ?? int.MaxValue;
+        // Only from the first epoch the caller holds a key for: what came before they joined is not theirs to list. A
+        // restored conversation lists exactly the epochs the caller's backup brought: another restorer's are not theirs.
+        var firstEpoch = view.MyKeys.Count == 0 ? int.MaxValue : view.MyKeys.Keys.Min();
+        var restoredEpochs = view.Restored is null ? null : view.MyKeys.Keys.ToList();
 
         // Ordered in memory: SQLite (the tests' provider) cannot order by DateTimeOffset, and a conversation's page is small.
         var all = (await db.Messages.AsNoTracking()
                 .Where(m => m.ConversationId == conversationId && m.Epoch >= firstEpoch && !hidden.Contains(m.Id))
+                .Where(m => restoredEpochs == null || restoredEpochs.Contains(m.Epoch))
                 .ToListAsync(cancellationToken))
             .OrderBy(m => m.SentAt).ThenBy(m => m.Id)
             .ToList();
         var start = after is { } cursor ? all.FindIndex(m => m.Id == cursor) + 1 : 0;
-        return [.. all.Skip(start).Take(Math.Clamp(limit, 1, 200))];
+        return (view, [.. all.Skip(start).Take(Math.Clamp(limit, 1, 200))]);
     }
 
     /// <summary>Posts a message the client sealed under the current epoch, with the id it bound into the ciphertext.</summary>
@@ -43,7 +45,7 @@ public sealed class Messages(
         Guid conversationId, Guid messageId, int epoch, byte[] ciphertext, Guid? replyToId, Guid? attachmentDocumentId,
         CancellationToken cancellationToken)
     {
-        var view = await conversations.MemberViewAsync(conversationId, cancellationToken);
+        var view = await conversations.WritableViewAsync(conversationId, cancellationToken);
         if (view.NeedsNewEpoch)
         {
             throw MessengerErrors.RekeyNeeded();
@@ -178,7 +180,7 @@ public sealed class Messages(
 
     private async Task<(Message Message, Conversations.View View)> OwnAsync(Guid conversationId, Guid messageId, Guid? ifMatch, CancellationToken cancellationToken)
     {
-        var view = await conversations.MemberViewAsync(conversationId, cancellationToken);
+        var view = await conversations.WritableViewAsync(conversationId, cancellationToken);
         var message = await db.Messages.FirstOrDefaultAsync(m => m.Id == messageId && m.ConversationId == conversationId, cancellationToken)
             ?? throw MessengerErrors.NoSuchMessage();
         if (message.SenderUserId != conversations.Me)

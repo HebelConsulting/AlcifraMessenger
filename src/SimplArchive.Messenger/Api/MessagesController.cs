@@ -15,15 +15,16 @@ public sealed class MessagesController(Messages messages) : ControllerBase
     [HttpGet]
     public async Task<ActionResult<MessagePageResource>> Page(Guid conversationId, [FromQuery] Guid? after, [FromQuery] int limit = 50, CancellationToken cancellationToken = default)
     {
-        var page = await messages.PageAsync(conversationId, after, limit, cancellationToken);
+        var (view, page) = await messages.PageAsync(conversationId, after, limit, cancellationToken);
+        var readOnly = view.IsReadOnly;
         var self = Self(conversationId);
         return new MessagePageResource
         {
-            Items = [.. page.Select(m => Resource(conversationId, m))],
+            Items = [.. page.Select(m => Resource(conversationId, m, readOnly))],
             Links =
             [
                 new Link("self", self, "GET"),
-                new Link("send", self, "POST"),
+                .. readOnly ? Array.Empty<Link>() : [new Link("send", self, "POST")],
                 .. page.Count > 0 ? [new Link("next", $"{self}?after={page[^1].Id}&limit={limit}", "GET")] : Array.Empty<Link>(),
             ],
         };
@@ -77,7 +78,7 @@ public sealed class MessagesController(Messages messages) : ControllerBase
 
     private static string Tag(Message message) => $"\"{message.ConcurrencyToken}\"";
 
-    private static MessageResource Resource(Guid conversationId, Message m)
+    private static MessageResource Resource(Guid conversationId, Message m, bool readOnly = false)
     {
         var self = $"{Self(conversationId)}/{m.Id}";
         return new MessageResource
@@ -92,10 +93,11 @@ public sealed class MessagesController(Messages messages) : ControllerBase
             AttachmentDocumentId = m.AttachmentDocumentId,
             Ciphertext = m.Ciphertext,
             ETag = Tag(m),
+            Restored = m.RestoredByUserId is not null,
             Links =
             [
-                new Link("edit", self, "PUT"),
-                new Link("delete", self, "DELETE"),
+                // Restored history is read, never changed for everyone; hiding it for oneself still works.
+                .. readOnly ? Array.Empty<Link>() : [new Link("edit", self, "PUT"), new Link("delete", self, "DELETE")],
                 new Link("hide", $"{self}/hidden", "PUT"),
                 .. m.AttachmentDocumentId is { } file
                     ? [new Link("attachment", $"/{ConversationsController.Base}/{conversationId}/files/{file}", "GET")]

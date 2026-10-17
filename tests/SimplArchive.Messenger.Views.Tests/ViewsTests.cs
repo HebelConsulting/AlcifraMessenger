@@ -183,6 +183,34 @@ public sealed class ViewsTests
         Assert.Equal(["Read", null], ThreadRows.Build(Chat(start.AddMinutes(2)), opened, Me).Select(r => r.Receipt));
     }
 
+    [Fact]
+    public void A_restored_conversation_knows_my_old_messages_by_my_id_there_and_marks_them()
+    {
+        var before = CultureInfo.CurrentUICulture;
+        CultureInfo.CurrentUICulture = new CultureInfo("en");
+        try
+        {
+            var myOldId = Guid.NewGuid();
+            var mine = Opened(myOldId, "from the old place", MessageState.Readable);
+            mine.Message.Restored = true;
+            var restored = new Conversation
+            {
+                Name = "Crew (restored)", IsReadOnly = true, Restored = true, MyUserId = myOldId,
+                Members = [new Member { UserId = myOldId, DisplayName = "Anna" }, new Member { UserId = Tom, DisplayName = "Tom" }],
+            };
+
+            var row = Assert.Single(ThreadRows.Build(restored, [mine], Me));
+
+            Assert.True(row.IsMine);                          // Anna's id there, not her id here
+            Assert.EndsWith("· restored", row.Footer);
+            Assert.False(row.CanReply);                       // history: nothing is sent into it
+        }
+        finally
+        {
+            CultureInfo.CurrentUICulture = before;
+        }
+    }
+
     private static OpenedMessage At(OpenedMessage message, DateTimeOffset sentAt)
     {
         message.Message.SentAt = sentAt;

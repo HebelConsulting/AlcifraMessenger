@@ -147,6 +147,9 @@ namespace SimplArchive.Messenger.ReadModel.Migrations
                     b.Property<Guid?>("ReplyToId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("RestoredByUserId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid>("SenderUserId")
                         .HasColumnType("uuid");
 
@@ -163,6 +166,34 @@ namespace SimplArchive.Messenger.ReadModel.Migrations
                     b.HasIndex("ConversationId", "SentAt");
 
                     b.ToTable("msg_messages", (string)null);
+                });
+
+            modelBuilder.Entity("SimplArchive.Messenger.ReadModel.OriginMember", b =>
+                {
+                    b.Property<Guid>("ConversationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("OriginUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("ConversationId", "OriginUserId");
+
+                    b.HasIndex("TenantId");
+
+                    b.ToTable("msg_origin_members", (string)null);
                 });
 
             modelBuilder.Entity("SimplArchive.Messenger.ReadModel.ReadReceipt", b =>
@@ -184,6 +215,37 @@ namespace SimplArchive.Messenger.ReadModel.Migrations
                     b.HasIndex("TenantId");
 
                     b.ToTable("msg_receipts", (string)null);
+                });
+
+            modelBuilder.Entity("SimplArchive.Messenger.ReadModel.RestoredConversation", b =>
+                {
+                    b.Property<Guid>("ConversationId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsReadOnly")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("OriginConversationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("OriginInstance")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTimeOffset>("RestoredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("ConversationId");
+
+                    b.HasIndex("TenantId", "OriginConversationId")
+                        .IsUnique();
+
+                    b.ToTable("msg_restored_conversations", (string)null);
                 });
 #pragma warning restore 612, 618
         }

@@ -39,6 +39,25 @@ message carrying a file names the document and seals its file name and type with
 UTF-8 JSON object `{"text": …, "name": …, "type": …}` instead of the bare text. Which of the two a message holds is
 told by the message itself — whether it names an attachment — never guessed from the bytes.
 
+## Backups
+
+A backup (`MessengerBackup`, core #1813) is **sealed only**: the ciphertext exactly as delivered, the owner's own sealed
+copy of each epoch's key, and each file as the envelope it was sent as. Nothing is decrypted on the way out, so it
+opens only with a key whose certificate it was sealed to. It is a zip, its entries stored uncompressed:
+
+| entry | holds |
+| --- | --- |
+| `manifest.json` | `format` (`simplarchive-messenger-backup`), `version` (1), `createdAt`, `instance` (where it was taken), `owner`, and `entries`: every other entry's path with its SHA-256 (lowercase hex) |
+| `conversations/<id>/conversation.json` | `id` (the id its messages are bound to), `name`, `isDirect`, `members` (`userId`, `email`, `displayName`), `myUserId` (the owner's id there), `keys` (`epoch`, the owner's sealed `key`) |
+| `conversations/<id>/messages.jsonl` | one message per line: `id`, `epoch`, `senderUserId`, `sentAt`, `editedAt`, `deletedAt`, `replyToId`, `ciphertext`, and `file`, the blob of its attachment |
+| `blobs/<sha256>` | a file's envelope |
+
+A restore checks every entry against the manifest **before** it changes anything, and keeps every id: a restored
+conversation gets a new folder, but its messages still open because the conversation id and the sender ids they are
+bound to travel with them. Restoring twice adds nothing; a second member restoring the same conversation joins it.
+Restored messages are marked: the format has no sender signatures (below), so they are as trustworthy as whoever
+restored them.
+
 ## Not in version 1
 
 Forward secrecy within an epoch (a ratchet) and signatures by the sender: a member holding the epoch key could forge a

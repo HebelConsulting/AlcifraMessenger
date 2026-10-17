@@ -61,7 +61,7 @@ public class ModuleManifestTests
     }
 
     [Fact]
-    public void The_six_tables_come_up_and_only_messages_are_concurrency_tracked()
+    public void The_eight_tables_come_up_and_only_messages_are_concurrency_tracked()
     {
         using var connection = new SqliteConnection("Filename=:memory:");
         connection.Open();
@@ -69,7 +69,9 @@ public class ModuleManifestTests
         db.Database.EnsureCreated();
 
         var tables = db.Model.GetEntityTypes().Select(t => t.GetTableName()).Order().ToList();
-        Assert.Equal(["msg_direct", "msg_epoch_keys", "msg_epochs", "msg_hidden", "msg_messages", "msg_receipts"], tables);
+        Assert.Equal(
+            ["msg_direct", "msg_epoch_keys", "msg_epochs", "msg_hidden", "msg_messages", "msg_origin_members", "msg_receipts", "msg_restored_conversations"],
+            tables);
 
         var tracked = db.Model.GetEntityTypes().Where(t => t.GetProperties().Any(p => p.IsConcurrencyToken)).Select(t => t.GetTableName());
         Assert.Equal(["msg_messages"], tracked);

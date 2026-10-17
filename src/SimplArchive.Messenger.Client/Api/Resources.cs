@@ -66,6 +66,27 @@ public sealed class Conversation : Resource
 
     /// <summary>The caller administers this group.</summary>
     public bool CanManageMembers { get; set; }
+
+    /// <summary>
+    /// The conversation id every message is bound to: <see cref="Id"/>, or for a restored conversation (core #1813) the
+    /// id it had where its messages were sealed. Use <see cref="SealedUnder"/>, which also answers an older server.
+    /// </summary>
+    public Guid SealedUnderId { get; set; }
+
+    /// <summary>The id the caller's own messages carry here: their user id, or in a restored conversation their id there.</summary>
+    public Guid MyUserId { get; set; }
+
+    /// <summary>Brought in from a backup.</summary>
+    public bool Restored { get; set; }
+
+    /// <summary>The installation a restored conversation came from.</summary>
+    public string? RestoredFrom { get; set; }
+
+    /// <summary>Archived history: readable, not continued — nothing is sent, edited or rekeyed.</summary>
+    public bool IsReadOnly { get; set; }
+
+    /// <summary>The id bound into every message's associated data.</summary>
+    public Guid SealedUnder => SealedUnderId == Guid.Empty ? Id : SealedUnderId;
 }
 
 /// <summary>A member, with <c>remove</c> (or leave, for the caller) and <c>make-admin</c>/<c>revoke-admin</c> where allowed.</summary>
@@ -82,6 +103,9 @@ public sealed class Member : Resource
 
     /// <summary>The member has read every message sent up to this moment; null while they have read nothing.</summary>
     public DateTimeOffset? ReadUpTo { get; set; }
+
+    /// <summary>The member's e-mail: what a backup names them by.</summary>
+    public string Email { get; set; } = string.Empty;
 }
 
 /// <summary>The caller's sealed copy of one epoch's conversation key.</summary>
@@ -130,6 +154,9 @@ public sealed class Message : Resource
 
     /// <summary>The sealed text (format version 1).</summary>
     public byte[] Ciphertext { get; set; } = [];
+
+    /// <summary>Brought in from a backup: as trustworthy as whoever restored it, so a thread marks it.</summary>
+    public bool Restored { get; set; }
 
     /// <summary>The tag an edit or a delete sends back as If-Match: what the caller saw.</summary>
     public string ETag { get; set; } = string.Empty;
@@ -187,3 +214,21 @@ public sealed class FiledFile : Resource
 
 /// <summary>A member's copy of a conversation key, sealed to their certificates.</summary>
 public sealed record WrappedKey(Guid UserId, byte[] Key);
+
+/// <summary>What one import of restored messages did.</summary>
+public sealed class ImportResult
+{
+    /// <summary>Messages added.</summary>
+    public int Imported { get; set; }
+
+    /// <summary>Already there: from an earlier restore of the same backup, or another member's.</summary>
+    public int Skipped { get; set; }
+}
+
+/// <summary>A member of a conversation as a backup names them: their id where its messages were sealed.</summary>
+public sealed record BackupMember(Guid UserId, string Email, string DisplayName);
+
+/// <summary>A message as a backup holds it, with the id and sender id its ciphertext is bound to.</summary>
+public sealed record BackupMessage(
+    Guid Id, int Epoch, Guid SenderUserId, DateTimeOffset SentAt, DateTimeOffset? EditedAt, DateTimeOffset? DeletedAt,
+    Guid? ReplyToId, Guid? AttachmentDocumentId, byte[] Ciphertext);

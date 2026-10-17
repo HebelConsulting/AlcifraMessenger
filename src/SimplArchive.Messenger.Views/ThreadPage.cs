@@ -25,7 +25,7 @@ internal sealed class ThreadPage : ContentPage
         _conversation = conversation;
         Title = ThreadRows.Title(conversation);
         ToolbarItems.Add(new ToolbarItem { Text = ViewText.Get("Refresh"), Command = new Command(async () => await LoadAsync()) });
-        if (!conversation.IsDirect)
+        if (!conversation.IsDirect && !conversation.IsReadOnly)
         {
             // A group's members, and what may be done with them (core #1810); leaving is there too, and here for speed.
             ToolbarItems.Add(new ToolbarItem { Text = ViewText.Get("Members"), Command = new Command(async () => await Navigation.PushAsync(screens.Members(_conversation))) });
@@ -69,7 +69,14 @@ internal sealed class ThreadPage : ContentPage
         var page = new Grid { RowDefinitions = [new(GridLength.Star), new(GridLength.Auto), new(GridLength.Auto)] };
         page.Add(_list, 0, 0);
         page.Add(_replyBar, 0, 1);
-        page.Add(composeBar, 0, 2);
+        // Restored history (core #1813) is read, not continued: where the compose bar would be, it says so.
+        page.Add(conversation.IsReadOnly
+            ? new Label
+            {
+                Text = ViewText.Get("RestoredReadOnly", conversation.RestoredFrom ?? string.Empty),
+                FontSize = 13, TextColor = Colors.Gray, Padding = new Thickness(16, 10), HorizontalTextAlignment = TextAlignment.Center,
+            }
+            : composeBar, 0, 2);
         Content = page;
     }
 

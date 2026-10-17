@@ -38,6 +38,21 @@ public sealed class Conversations(MessengerReadModelContext db, IModuleArchiveFa
 
         /// <summary>How far each member has read, for the thread's receipt line; absent for one who has read nothing.</summary>
         public IReadOnlyDictionary<Guid, DateTimeOffset> ReadUpTo { get; init; } = new Dictionary<Guid, DateTimeOffset>();
+
+        /// <summary>Each member's e-mail: what a backup names them by, and a restore matches them with.</summary>
+        public IReadOnlyDictionary<Guid, string> Emails { get; init; } = new Dictionary<Guid, string>();
+
+        /// <summary>Brought in from a backup (core #1813); null for a conversation that started here.</summary>
+        public RestoredConversation? Restored { get; init; }
+
+        /// <summary>The caller's id in a restored conversation: the one their own old messages are bound to.</summary>
+        public Guid? MyOriginUserId { get; init; }
+
+        /// <summary>Archived history: nothing may be sent, edited, deleted for everyone, added or rekeyed.</summary>
+        public bool IsReadOnly => Restored?.IsReadOnly == true;
+
+        /// <summary>The id every message's ciphertext is bound to: the original one for a restored conversation.</summary>
+        public Guid SealedUnder => Restored?.OriginConversationId ?? Id;
     }
 
     public Guid Me => caller.UserId ?? throw MessengerErrors.NotSignedIn();
@@ -63,6 +78,11 @@ public sealed class Conversations(MessengerReadModelContext db, IModuleArchiveFa
     public async Task<View?> ViewAsync(Guid conversationId, CancellationToken cancellationToken)
     {
         var me = Me;
+        if (await db.RestoredConversations.AsNoTracking().FirstOrDefaultAsync(r => r.ConversationId == conversationId, cancellationToken) is { } restored)
+        {
+            return await RestoredViewAsync(restored, cancellationToken);
+        }
+
         var epoch = await CurrentEpochAsync(conversationId, cancellationToken);
         var keys = await db.EpochKeys.Where(k => k.ConversationId == conversationId && k.Epoch == epoch).ToListAsync(cancellationToken);
         if (keys.FirstOrDefault(k => k.UserId == me) is not { } mine)
@@ -87,6 +107,7 @@ public sealed class Conversations(MessengerReadModelContext db, IModuleArchiveFa
         // Each member looked up once: their name for the screens, their e-mail against the Admins field.
         var adminIds = new HashSet<Guid>();
         var names = new Dictionary<Guid, string>();
+        var emails = new Dictionary<Guid, string>();
         foreach (var member in keys.Select(k => k.UserId))
         {
             if (await archive.GetUserAsync(member, cancellationToken) is not { } person)
@@ -95,6 +116,7 @@ public sealed class Conversations(MessengerReadModelContext db, IModuleArchiveFa
             }
 
             names[member] = person.DisplayName;
+            emails[member] = person.Email;
             if (direct is null && admins.Contains(person.Email, StringComparer.OrdinalIgnoreCase))
             {
                 adminIds.Add(member);
@@ -115,9 +137,39 @@ public sealed class Conversations(MessengerReadModelContext db, IModuleArchiveFa
         {
             AdminIds = adminIds,
             Names = names,
+            Emails = emails,
             MyKeys = myKeys,
             ReadUpTo = receipts.Where(r => keys.Any(k => k.UserId == r.Key)).ToDictionary(),
             NeedsNewEpoch = await db.KeyEpochs.AnyAsync(e => e.ConversationId == conversationId && e.Epoch == epoch && e.ClosedAt != null, cancellationToken),
+        };
+    }
+
+    // A restored conversation (core #1813) as one of its restorers sees it: its members are the backup's, by their ids
+    // there, so every old message names its sender; the caller is in it by any key of theirs, not the latest epoch's,
+    // because another member's later backup may bring a later epoch. Read-only history: no admins, nothing unread.
+    private async Task<View?> RestoredViewAsync(RestoredConversation restored, CancellationToken cancellationToken)
+    {
+        var me = Me;
+        var id = restored.ConversationId;
+        var myKeys = (await db.EpochKeys.AsNoTracking().Where(k => k.ConversationId == id && k.UserId == me)
+                .Select(k => new { k.Epoch, k.WrappedKey }).ToListAsync(cancellationToken))
+            .ToDictionary(k => k.Epoch, k => k.WrappedKey);
+        if (myKeys.Count == 0)
+        {
+            return null;
+        }
+
+        var latest = myKeys.Keys.Max();
+        var origin = await db.OriginMembers.AsNoTracking().Where(o => o.ConversationId == id).ToListAsync(cancellationToken);
+        var myEmail = (await caller.GetIdentityAsync(cancellationToken))?.Email;
+        var folder = await archive.GetDocumentAsync(id, cancellationToken);
+        return new View(id, false, folder?.Name ?? string.Empty, null, latest, myKeys[latest], [.. origin.Select(o => o.OriginUserId)], [], 0, false, me)
+        {
+            Names = origin.ToDictionary(o => o.OriginUserId, o => o.DisplayName),
+            Emails = origin.ToDictionary(o => o.OriginUserId, o => o.Email),
+            MyKeys = myKeys,
+            Restored = restored,
+            MyOriginUserId = origin.FirstOrDefault(o => o.Email.Equals(myEmail, StringComparison.OrdinalIgnoreCase))?.OriginUserId,
         };
     }
 
@@ -195,7 +247,7 @@ public sealed class Conversations(MessengerReadModelContext db, IModuleArchiveFa
     /// </summary>
     public async Task AddMemberAsync(Guid conversationId, Guid userId, IReadOnlyList<WrappedKey> keys, CancellationToken cancellationToken)
     {
-        var view = await MemberViewAsync(conversationId, cancellationToken);
+        var view = await WritableViewAsync(conversationId, cancellationToken);
         await RequireAdminAsync(view, cancellationToken);
         if (view.IsDirect)
         {
@@ -232,7 +284,7 @@ public sealed class Conversations(MessengerReadModelContext db, IModuleArchiveFa
     /// </summary>
     public async Task SetAdminAsync(Guid conversationId, Guid userId, bool admin, CancellationToken cancellationToken)
     {
-        var view = await MemberViewAsync(conversationId, cancellationToken);
+        var view = await WritableViewAsync(conversationId, cancellationToken);
         await RequireAdminAsync(view, cancellationToken);
         if (view.IsDirect)
         {
@@ -267,7 +319,7 @@ public sealed class Conversations(MessengerReadModelContext db, IModuleArchiveFa
     /// </summary>
     public async Task RemoveMemberAsync(Guid conversationId, Guid userId, IReadOnlyList<WrappedKey> nextKeys, CancellationToken cancellationToken)
     {
-        var view = await MemberViewAsync(conversationId, cancellationToken);
+        var view = await WritableViewAsync(conversationId, cancellationToken);
         if (userId != Me)
         {
             await RequireAdminAsync(view, cancellationToken);
@@ -340,7 +392,7 @@ public sealed class Conversations(MessengerReadModelContext db, IModuleArchiveFa
     /// </summary>
     public async Task PublishEpochAsync(Guid conversationId, IReadOnlyList<WrappedKey> keys, CancellationToken cancellationToken)
     {
-        var view = await MemberViewAsync(conversationId, cancellationToken);
+        var view = await WritableViewAsync(conversationId, cancellationToken);
         if (!view.NeedsNewEpoch)
         {
             throw MessengerErrors.NotClosed();
@@ -369,6 +421,13 @@ public sealed class Conversations(MessengerReadModelContext db, IModuleArchiveFa
     /// <summary>The caller's view, or 404: a conversation one is not in does not exist for one.</summary>
     public async Task<View> MemberViewAsync(Guid conversationId, CancellationToken cancellationToken) =>
         await ViewAsync(conversationId, cancellationToken) ?? throw MessengerErrors.NotAMember();
+
+    /// <summary>The caller's view of a conversation that may still change: a restored, read-only one refuses.</summary>
+    public async Task<View> WritableViewAsync(Guid conversationId, CancellationToken cancellationToken)
+    {
+        var view = await MemberViewAsync(conversationId, cancellationToken);
+        return view.IsReadOnly ? throw MessengerErrors.ReadOnly() : view;
+    }
 
     public async Task<int> CurrentEpochAsync(Guid conversationId, CancellationToken cancellationToken) =>
         await db.KeyEpochs.Where(e => e.ConversationId == conversationId).Select(e => (int?)e.Epoch).MaxAsync(cancellationToken) ?? 0;

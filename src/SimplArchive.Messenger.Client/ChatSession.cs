@@ -303,5 +303,5 @@ public sealed class ChatSession(MessengerApi api, IConversationKeyOpener opener,
     private sealed record FileBody(string Text, string Name, string Type);
 
     private static MessageContext Context(Conversation conversation, int epoch, Guid messageId, Guid sender) =>
-        new(conversation.Id, epoch, messageId, sender);
+        new(conversation.SealedUnder, epoch, messageId, sender);
 }

@@ -68,6 +68,12 @@ public sealed class Message
     /// <summary>The Message Object a file message carries, in the archive.</summary>
     public Guid? AttachmentDocumentId { get; set; }
 
+    /// <summary>
+    /// Who brought this message in from a backup (core #1813); null for one sent here. A restored message keeps its
+    /// original id and sender id, which its ciphertext is bound to, so the thread marks it rather than vouching for it.
+    /// </summary>
+    public Guid? RestoredByUserId { get; set; }
+
     public byte[] Ciphertext { get; set; } = [];
     public Guid ConcurrencyToken { get; set; }
 }
@@ -87,4 +93,35 @@ public sealed class ReadReceipt
     public Guid ConversationId { get; set; }
     public Guid UserId { get; set; }
     public DateTimeOffset ReadUpTo { get; set; }
+}
+
+/// <summary>
+/// A conversation brought in from a backup (core #1813). Its folder here has a new id, but its messages are bound to the
+/// one they were sealed under, so that is kept; a second member restoring the same conversation joins this one.
+/// </summary>
+public sealed class RestoredConversation
+{
+    public Guid ConversationId { get; set; }
+    public Guid TenantId { get; set; }
+
+    /// <summary>The conversation's id where it was sealed: what every message's ciphertext is bound to.</summary>
+    public Guid OriginConversationId { get; set; }
+
+    /// <summary>The installation the backup came from, as its address, for display.</summary>
+    public string OriginInstance { get; set; } = string.Empty;
+
+    public DateTimeOffset RestoredAt { get; set; }
+
+    /// <summary>Archived history: nothing is sent, edited or rekeyed. Resuming the conversation clears it.</summary>
+    public bool IsReadOnly { get; set; }
+}
+
+/// <summary>A member of a restored conversation as the backup names them: their id there, which the messages are bound to.</summary>
+public sealed class OriginMember
+{
+    public Guid ConversationId { get; set; }
+    public Guid OriginUserId { get; set; }
+    public Guid TenantId { get; set; }
+    public string Email { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
 }

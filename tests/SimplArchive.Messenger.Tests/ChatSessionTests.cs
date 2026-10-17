@@ -150,16 +150,4 @@ public sealed class ChatSessionTests : IAsyncDisposable
         Assert.Equal(3, forAnna.Epoch);   // one for the add, one for the removal
         Assert.Equal(["Only for Tom", "Welcome Eve", "Tom is gone"], await ReadAllAsync(annas, forAnna));
     }
-
-    /// <summary>The app's hardware key, stood in for by the private key of the person's certificate.</summary>
-    private sealed class PrivateKeyOpener(X509Certificate2 certificate) : IConversationKeyOpener
-    {
-        public Task<byte[]> OpenAsync(byte[] wrappedKey, CancellationToken cancellationToken = default)
-        {
-            var envelope = new EnvelopedCms();
-            envelope.Decode(wrappedKey);
-            envelope.Decrypt(new X509Certificate2Collection(certificate));
-            return Task.FromResult(envelope.ContentInfo.Content);
-        }
-    }
 }

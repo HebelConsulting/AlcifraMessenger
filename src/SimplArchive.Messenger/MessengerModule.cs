@@ -72,5 +72,6 @@ public sealed class MessengerModule : IIndustryModule
         services.AddScoped<Conversations>();
         services.AddScoped<Messages>();
         services.AddScoped<Files>();
+        services.AddScoped<Restores>();
     }
 }
