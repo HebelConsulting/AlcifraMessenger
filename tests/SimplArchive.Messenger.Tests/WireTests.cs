@@ -53,6 +53,12 @@ public sealed class WireTests : IAsyncDisposable
         Assert.Equal(0, (await api.RefreshAsync(hisView)).Unread);
         Assert.Contains((_tom, hisView.Id), _rig.Notices.Cleared);
 
+        // Anna sees how far Tom has read: the receipt beneath her message. She herself has read nothing yet.
+        _rig.Caller.UserId = _anna;
+        var hers = await api.RefreshAsync(chat);
+        Assert.True(hers.Members.Single(m => m.UserId == _tom).ReadUpTo >= sent.SentAt);
+        Assert.Null(hers.Members.Single(m => m.UserId == _anna).ReadUpTo);
+
         // Only the sender edits, and only under the tag they saw: a second edit with the first tag is a 412.
         _rig.Caller.UserId = _anna;
         var edited = await api.EditAsync(sent, chat.Epoch, MessageFormat.Seal(key, new MessageContext(chat.Id, chat.Epoch, id, _anna), "Hi Tom"u8));

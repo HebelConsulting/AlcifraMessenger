@@ -21,7 +21,7 @@ public sealed class ViewsTests
             CultureInfo.CurrentUICulture = new CultureInfo(language);
             foreach (var key in ViewText.Keys)
             {
-                Assert.False(string.IsNullOrWhiteSpace(ViewText.Get(key, 3)), $"{key} is empty in {language}");
+                Assert.False(string.IsNullOrWhiteSpace(ViewText.Get(key, 3, 4)), $"{key} is empty in {language}");
             }
 
             // Not silently English: a translated language differs from English in at least its title.
@@ -120,6 +120,73 @@ public sealed class ViewsTests
         Assert.False(rows[0].CanEdit);                // its text is sealed with the file's name and type
         Assert.True(rows[0].CanDeleteForEveryone);
         Assert.Equal("You: 📎 harbour.jpg", rows[1].Quote);
+    }
+
+    [Fact]
+    public void A_one_to_one_receipt_sits_beneath_my_latest_message_the_other_has_read()
+    {
+        var start = DateTimeOffset.UtcNow;
+        var opened = new[]
+        {
+            At(Opened(Me, "first", MessageState.Readable), start),
+            At(Opened(Tom, "reply", MessageState.Readable), start.AddMinutes(1)),
+            At(Opened(Me, "second", MessageState.Readable), start.AddMinutes(2)),
+            At(Opened(Me, "unread", MessageState.Readable), start.AddMinutes(4)),
+        };
+        var chat = new Conversation
+        {
+            IsDirect = true, CounterpartName = "Tom",
+            Members = [new Member { UserId = Me, ReadUpTo = start.AddMinutes(1) }, new Member { UserId = Tom, DisplayName = "Tom", ReadUpTo = start.AddMinutes(3) }],
+        };
+
+        var rows = ThreadRows.Build(chat, opened, Me);
+
+        Assert.Equal([null, null, "Read", null], rows.Select(r => r.Receipt));
+        Assert.Empty(rows[2].ReadBy);   // nobody to list in a one-to-one chat
+    }
+
+    [Fact]
+    public void A_group_receipt_counts_and_names_who_has_read_it()
+    {
+        var start = DateTimeOffset.UtcNow;
+        var ina = Guid.NewGuid();
+        var opened = new[] { At(Opened(Me, "hello", MessageState.Readable), start) };
+        var group = new Conversation
+        {
+            Name = "Crew",
+            Members =
+            [
+                new Member { UserId = Me, DisplayName = "Anna", ReadUpTo = start },
+                new Member { UserId = Tom, DisplayName = "Tom", ReadUpTo = start.AddSeconds(5) },
+                new Member { UserId = ina, DisplayName = "Ina" },
+            ],
+        };
+
+        var row = Assert.Single(ThreadRows.Build(group, opened, Me));
+
+        Assert.Equal("Read by 1 of 2", row.Receipt);   // the caller's own position never counts
+        Assert.Equal(["Tom"], row.ReadBy);
+    }
+
+    [Fact]
+    public void No_receipt_while_nobody_else_has_read_and_none_on_a_deleted_message()
+    {
+        var start = DateTimeOffset.UtcNow;
+        var opened = new[] { At(Opened(Me, "kept", MessageState.Readable), start), At(Opened(Me, null, MessageState.Deleted), start.AddMinutes(1)) };
+        Conversation Chat(DateTimeOffset? tomRead) => new()
+        {
+            IsDirect = true, CounterpartName = "Tom",
+            Members = [new Member { UserId = Me }, new Member { UserId = Tom, DisplayName = "Tom", ReadUpTo = tomRead }],
+        };
+
+        Assert.All(ThreadRows.Build(Chat(null), opened, Me), r => Assert.Null(r.Receipt));
+        Assert.Equal(["Read", null], ThreadRows.Build(Chat(start.AddMinutes(2)), opened, Me).Select(r => r.Receipt));
+    }
+
+    private static OpenedMessage At(OpenedMessage message, DateTimeOffset sentAt)
+    {
+        message.Message.SentAt = sentAt;
+        return message;
     }
 
     private static OpenedMessage Opened(Guid sender, string? text, MessageState state, Guid? replyTo = null, bool edited = false, string[]? links = null) =>

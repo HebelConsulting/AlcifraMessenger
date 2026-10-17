@@ -79,6 +79,9 @@ public sealed class Member : Resource
 
     /// <summary>The member's display name; empty for an account deactivated since.</summary>
     public string DisplayName { get; set; } = string.Empty;
+
+    /// <summary>The member has read every message sent up to this moment; null while they have read nothing.</summary>
+    public DateTimeOffset? ReadUpTo { get; set; }
 }
 
 /// <summary>The caller's sealed copy of one epoch's conversation key.</summary>

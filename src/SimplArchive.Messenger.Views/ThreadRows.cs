@@ -14,6 +14,15 @@ public sealed record ThreadRow(
 
     /// <summary>The opened text, for an edit to start from; null when there is none to edit.</summary>
     public string? EditableText { get; init; }
+
+    /// <summary>
+    /// "Read" (one-to-one) or "Read by 2 of 4" (group) beneath the caller's latest message somebody has read; null on
+    /// every other bubble.
+    /// </summary>
+    public string? Receipt { get; init; }
+
+    /// <summary>Who has read this message, by name, for the "Read by" entry a tap offers; empty where there is no receipt.</summary>
+    public IReadOnlyList<string> ReadBy { get; init; } = [];
 }
 
 /// <summary>
@@ -27,7 +36,8 @@ public static class ThreadRows
     {
         var byId = opened.ToDictionary(o => o.Message.Id);
         var names = conversation.Members.ToDictionary(m => m.UserId, m => m.DisplayName);
-        return [.. opened.Select(o =>
+        var receiptOn = ReceiptMessage(conversation, opened, me);
+        var rows = opened.Select(o =>
         {
             var mine = o.Message.SenderUserId == me;
             var (text, placeholder) = o.State switch
@@ -54,7 +64,30 @@ public static class ThreadRows
                 EditableText = mine && readable && o.File is null ? o.Text : null,
                 File = readable ? o.File : null,
             };
-        })];
+        });
+        return [.. rows.Select(r => r.Message.Id == receiptOn?.Id ? WithReceipt(r, conversation, me, names) : r)];
+    }
+
+    // The caller's latest message, not deleted, that at least one other member has read: the one bubble the receipt
+    // line sits beneath. Read positions are times, so "read" means read up to at least the moment it was sent.
+    private static Message? ReceiptMessage(Conversation conversation, IReadOnlyList<OpenedMessage> opened, Guid me)
+    {
+        var latestRead = conversation.Members.Where(m => m.UserId != me).Select(m => m.ReadUpTo).Max();
+        return latestRead is not { } upTo
+            ? null
+            : opened.Where(o => o.Message.SenderUserId == me && o.State != MessageState.Deleted && o.Message.SentAt <= upTo)
+                .Select(o => o.Message).LastOrDefault();
+    }
+
+    private static ThreadRow WithReceipt(ThreadRow row, Conversation conversation, Guid me, Dictionary<Guid, string> names)
+    {
+        var others = conversation.Members.Where(m => m.UserId != me).ToList();
+        var readers = others.Where(m => m.ReadUpTo >= row.Message.SentAt).ToList();
+        return row with
+        {
+            Receipt = conversation.IsDirect ? ViewText.Get("Read") : ViewText.Get("ReadBy", readers.Count, others.Count),
+            ReadBy = conversation.IsDirect ? [] : [.. readers.Select(m => NameOf(m.UserId, names, me))],
+        };
     }
 
     /// <summary>The conversation's title: a group's name, or the other person's in a one-to-one chat.</summary>

@@ -35,6 +35,9 @@ public sealed class Conversations(MessengerReadModelContext db, IModuleArchiveFa
 
         /// <summary>Somebody left under the current epoch: a remaining member must publish the next before anything is sent.</summary>
         public bool NeedsNewEpoch { get; init; }
+
+        /// <summary>How far each member has read, for the thread's receipt line; absent for one who has read nothing.</summary>
+        public IReadOnlyDictionary<Guid, DateTimeOffset> ReadUpTo { get; init; } = new Dictionary<Guid, DateTimeOffset>();
     }
 
     public Guid Me => caller.UserId ?? throw MessengerErrors.NotSignedIn();
@@ -71,8 +74,10 @@ public sealed class Conversations(MessengerReadModelContext db, IModuleArchiveFa
         var folder = await archive.GetDocumentAsync(conversationId, cancellationToken);
         var admins = folder?.FieldLists.GetValueOrDefault(MessengerMasks.AdminsField) ?? [];
         var myEmail = (await caller.GetIdentityAsync(cancellationToken))?.Email;
-        var readUpTo = await db.ReadReceipts.Where(r => r.ConversationId == conversationId && r.UserId == me)
-            .Select(r => (DateTimeOffset?)r.ReadUpTo).FirstOrDefaultAsync(cancellationToken);
+        // Every member's read position at once: the caller's for the unread count, everyone's for the receipt line.
+        var receipts = await db.ReadReceipts.AsNoTracking().Where(r => r.ConversationId == conversationId)
+            .ToDictionaryAsync(r => r.UserId, r => r.ReadUpTo, cancellationToken);
+        DateTimeOffset? readUpTo = receipts.TryGetValue(me, out var mineRead) ? mineRead : null;
         var hidden = db.HiddenMessages.Where(h => h.UserId == me).Select(h => h.MessageId);
         var unread = (await db.Messages
                 .Where(m => m.ConversationId == conversationId && m.SenderUserId != me && m.DeletedAt == null && !hidden.Contains(m.Id))
@@ -111,6 +116,7 @@ public sealed class Conversations(MessengerReadModelContext db, IModuleArchiveFa
             AdminIds = adminIds,
             Names = names,
             MyKeys = myKeys,
+            ReadUpTo = receipts.Where(r => keys.Any(k => k.UserId == r.Key)).ToDictionary(),
             NeedsNewEpoch = await db.KeyEpochs.AnyAsync(e => e.ConversationId == conversationId && e.Epoch == epoch && e.ClosedAt != null, cancellationToken),
         };
     }

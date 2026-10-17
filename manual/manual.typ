@@ -128,12 +128,22 @@ The apps say both plainly when it happens.
 - *Delete for me.* Hides the message for you only.
 - *Read markers*#idx("read marker") only move forward, so an older device catching up changes nothing.
 
+== Read receipts
+
+Beneath your latest message that somebody has read, the thread shows *"Read"* in a one-to-one chat, or *"Read by 2 of
+4"* in a group; tapping that message and choosing *Read by…* lists who. A receipt is how far each member has read the
+conversation, not a mark per message, and it is always on: the same marker that counts your unread messages and
+clears the notification is what the others see.
+
 == The "New messages" notification
 
 When a message arrives, every other member gets a notification that says *"New messages"* — never the sender, never the
 text, because it can reach a lock screen. It is *never mailed*. While it is unread, further messages fold into it
 rather than adding more, so the phone is pushed once per burst; reading the conversation clears it, and the next
 message pushes again.
+
+The push itself carries nothing but the notification's id; the phone fetches the rest from the archive. Tapping it
+opens that conversation, the key dialog first if the key is needed.
 
 // ─────────────────────────────────────────────────────────────────────────────
 = Photos and files

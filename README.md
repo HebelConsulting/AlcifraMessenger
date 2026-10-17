@@ -11,7 +11,7 @@ Open source under the Apache License 2.0, all of it:
 | **server module** | a SimplArchive industry module: conversations, members, key epochs, messages |
 | **client library** | the message format, conversation keys and the API client, free of any user interface |
 | **views** | the conversation list, thread and compose screens, for a cross-platform app |
-| **app** | a standalone messenger app built from the library and the views |
+| **app — SAM** | a standalone messenger app built from the library and the views: messages only |
 | **key library** | the small hardware-key core: a PIV session and opening an encrypted envelope with the key |
 
 ## Status
@@ -30,7 +30,9 @@ arrives slice by slice.
   leaving a group) and the people picker, code-only .NET MAUI for Android, in English, German, Italian and Spanish.
 - **Free, no licence:** the module needs no licence file (core ABI 1.23), wherever it runs. `demo/up.sh` is the
   standalone start: one command to a SimplArchive with the Messenger active and test certificates enrolled.
-- Next: group management, photos and files, read receipts on the phone, then backup and restore.
+- **On the phone:** the screens run in SimplArchive Mobile's Messages tile — groups with administrators, photos and
+  files, read receipts, and a "new messages" push that opens its conversation.
+- Next: backup and restore, then **SAM**, the standalone messages-only app.
 
 ## Building
 

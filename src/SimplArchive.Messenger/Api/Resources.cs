@@ -41,6 +41,9 @@ public sealed class MemberResource : HypermediaResource
 
     /// <summary>The member's display name; empty for an account deactivated since.</summary>
     public string DisplayName { get; set; } = string.Empty;
+
+    /// <summary>The member has read every message sent up to this moment; null while they have read nothing.</summary>
+    public DateTimeOffset? ReadUpTo { get; set; }
 }
 
 /// <summary>One epoch's key, as the caller's sealed copy.</summary>

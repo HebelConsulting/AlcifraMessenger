@@ -223,12 +223,23 @@ internal sealed class ThreadPage : ContentPage
         }
 
         actions.Add(ViewText.Get("DeleteForMe"));
+        if (row.ReadBy.Count > 0)
+        {
+            actions.Add(ViewText.Get("WhoRead"));
+        }
+
         var chosen = await DisplayActionSheetAsync(null, ViewText.Get("Cancel"), null, [.. actions]);
         try
         {
             if (chosen == ViewText.Get("Open"))
             {
                 await OpenFileAsync(row);
+                return;
+            }
+
+            if (chosen == ViewText.Get("WhoRead"))
+            {
+                await DisplayAlertAsync(row.Receipt, string.Join("\n", row.ReadBy), ViewText.Get("OK"));
                 return;
             }
 
@@ -303,6 +314,7 @@ internal sealed class ThreadPage : ContentPage
         var text = new Label { FontSize = 16 };
         var fileChip = new Label { FontSize = 15, FontAttributes = FontAttributes.Bold, LineBreakMode = LineBreakMode.MiddleTruncation };
         var footer = new Label { FontSize = 11, HorizontalTextAlignment = TextAlignment.End };
+        var receipt = new Label { FontSize = 11, TextColor = Colors.Gray, HorizontalTextAlignment = TextAlignment.End, HorizontalOptions = LayoutOptions.End };
         var body = new VerticalStackLayout { Spacing = 3, Children = { sender, quoteBox, fileChip, text, footer } };
         var bubble = new Border
         {
@@ -312,8 +324,8 @@ internal sealed class ThreadPage : ContentPage
             MaximumWidthRequest = 320,
             Content = body,
         };
-        var row = new Grid { Padding = new Thickness(10, 3) };
-        row.Add(bubble);
+        // The receipt sits beneath the bubble, outside it: it describes the others, not the message.
+        var row = new VerticalStackLayout { Padding = new Thickness(10, 3), Spacing = 2, Children = { bubble, receipt } };
         row.BindingContextChanged += (_, _) =>
         {
             if (row.BindingContext is not ThreadRow r)
@@ -340,6 +352,8 @@ internal sealed class ThreadPage : ContentPage
             quoteBox.BackgroundColor = r.IsMine ? Colors.White.WithAlpha(0.2f) : Colors.White;
             quote.TextColor = r.IsMine ? Colors.White : Colors.DimGray;
             quote.Text = r.Quote;
+            receipt.IsVisible = r.Receipt is not null;
+            receipt.Text = r.Receipt;
         };
         return row;
     }

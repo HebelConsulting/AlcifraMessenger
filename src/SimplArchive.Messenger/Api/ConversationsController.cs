@@ -130,6 +130,7 @@ public sealed class ConversationsController(Conversations conversations, Message
                 UserId = m,
                 IsAdmin = view.AdminIds.Contains(m),
                 DisplayName = view.Names.GetValueOrDefault(m, string.Empty),
+                ReadUpTo = view.ReadUpTo.TryGetValue(m, out var read) ? read : null,
                 Links =
                 [
                     // Whose certificates a new epoch's key is sealed to: every member's, on every rekey.
