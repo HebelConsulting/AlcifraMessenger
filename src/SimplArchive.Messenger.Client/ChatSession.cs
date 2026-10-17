@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
+using System.Text.Json;
 using SimplArchive.Messenger.Client.Api;
 
 namespace SimplArchive.Messenger.Client;
@@ -22,7 +23,14 @@ public enum MessageState
 }
 
 /// <summary>A message and what reading it gave.</summary>
-public sealed record OpenedMessage(Message Message, string? Text, MessageState State);
+public sealed record OpenedMessage(Message Message, string? Text, MessageState State)
+{
+    /// <summary>The file it carries, by name and type, when it carries one and could be read.</summary>
+    public SentFile? File { get; init; }
+}
+
+/// <summary>A file a message carries: what the message's sealed body says about it. Its bytes are opened on request.</summary>
+public sealed record SentFile(string Name, string ContentType);
 
 /// <summary>
 /// One person's Messenger session, free of any user interface: sealing and opening text, and every act that makes or
@@ -82,14 +90,63 @@ public sealed class ChatSession(MessengerApi api, IConversationKeyOpener opener,
         var key = await Keys.KeyAsync(conversation.Id, message.Epoch, mine.Key, cancellationToken);
         try
         {
-            var text = MessageFormat.Open(key, Context(conversation, message.Epoch, message.Id, message.SenderUserId), message.Ciphertext);
-            return new OpenedMessage(message, Encoding.UTF8.GetString(text), MessageState.Readable);
+            var body = MessageFormat.Open(key, Context(conversation, message.Epoch, message.Id, message.SenderUserId), message.Ciphertext);
+            if (message.AttachmentDocumentId is null)
+            {
+                return new OpenedMessage(message, Encoding.UTF8.GetString(body), MessageState.Readable);
+            }
+
+            // A message carrying a file seals its text with the file's name and type (format v1, docs/format.md).
+            var withFile = JsonSerializer.Deserialize<FileBody>(body, BodyJson)
+                ?? throw new CryptographicException("A message carrying a file has no body.");
+            return new OpenedMessage(message, withFile.Text, MessageState.Readable) { File = new SentFile(withFile.Name, withFile.Type) };
         }
-        catch (CryptographicException)
+        catch (Exception exception) when (exception is CryptographicException or JsonException)
         {
             return new OpenedMessage(message, null, MessageState.Unopenable);
         }
     }
+
+    /// <summary>
+    /// Sends a file: sealed to EVERY certificate of every member as a CMS envelope (so it opens with a member's own key,
+    /// outside the Messenger too), uploaded straight to the store, and named by a message that seals the file's name and
+    /// type with <paramref name="text"/>.
+    /// </summary>
+    public async Task<Message> SendFileAsync(
+        Conversation conversation, MessagePage page, byte[] content, string fileName, string contentType, string text = "",
+        CancellationToken cancellationToken = default)
+    {
+        var current = conversation.NeedsNewEpoch ? await PublishNewEpochAsync(conversation, cancellationToken) : conversation;
+        var certificates = new List<X509Certificate2>();
+        try
+        {
+            foreach (var member in current.Members)
+            {
+                foreach (var pem in (await api.CertificatesAsync(member, cancellationToken)).CertificatesPem)
+                {
+                    certificates.Add(X509Certificate2.CreateFromPem(pem));
+                }
+            }
+
+            var filed = await api.UploadFileAsync(current, ConversationKeys.SealTo(content, certificates), cancellationToken);
+            var id = Guid.NewGuid();
+            return await WithCurrentEpochAsync(current, async latest =>
+            {
+                var key = await Keys.KeyAsync(latest.Id, latest.Epoch, latest.MyKey, cancellationToken);
+                var body = JsonSerializer.SerializeToUtf8Bytes(new FileBody(text, fileName, contentType), BodyJson);
+                var sealedBody = MessageFormat.Seal(key, Context(latest, latest.Epoch, id, me), body);
+                return await api.SendAsync(page, id, latest.Epoch, sealedBody, attachmentDocumentId: filed.DocumentId, cancellationToken: cancellationToken);
+            }, cancellationToken);
+        }
+        finally
+        {
+            certificates.ForEach(c => c.Dispose());
+        }
+    }
+
+    /// <summary>The bytes of the file <paramref name="message"/> carries, opened with the member's key (one key use).</summary>
+    public async Task<byte[]> OpenFileAsync(Message message, CancellationToken cancellationToken = default) =>
+        await opener.OpenAsync(await api.DownloadFileAsync(message, cancellationToken), cancellationToken);
 
     /// <summary>
     /// Seals and sends <paramref name="text"/>. If somebody left, the next epoch is published first; if the epoch moved on
@@ -239,6 +296,11 @@ public sealed class ChatSession(MessengerApi api, IConversationKeyOpener opener,
             certificates.ForEach(c => c.Dispose());
         }
     }
+
+    private static readonly JsonSerializerOptions BodyJson = new(JsonSerializerDefaults.Web);
+
+    /// <summary>A message's body when it carries a file: its text, and the file's name and type.</summary>
+    private sealed record FileBody(string Text, string Name, string Type);
 
     private static MessageContext Context(Conversation conversation, int epoch, Guid messageId, Guid sender) =>
         new(conversation.Id, epoch, messageId, sender);

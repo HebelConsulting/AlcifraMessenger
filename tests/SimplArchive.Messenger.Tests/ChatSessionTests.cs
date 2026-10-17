@@ -74,6 +74,29 @@ public sealed class ChatSessionTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task A_photo_is_sealed_to_every_member_and_opened_with_the_receivers_own_key()
+    {
+        var (anna, tom) = (Person("Anna"), Person("Tom"));
+        await _rig.StartAsync();
+        _rig.Caller.UserId = anna;
+        await _rig.Api.DiscoverAsync();
+        var annas = SessionOf(anna);
+        var chat = await annas.StartDirectAsync(await _rig.Api.ConversationsAsync(), Assert.Single((await _rig.Api.PeopleAsync("tom")).Items));
+        var (page, _) = await annas.MessagesAsync(chat);
+        var photo = System.Security.Cryptography.RandomNumberGenerator.GetBytes(4096);
+
+        await annas.SendFileAsync(chat, page, photo, "harbour.jpg", "image/jpeg", "Look at this");
+
+        var forTom = await AsAsync(tom, chat);
+        var toms = SessionOf(tom);
+        var (_, messages) = await toms.MessagesAsync(forTom);
+        var opened = await toms.OpenAsync(forTom, Assert.Single(messages));
+        Assert.Equal("Look at this", opened.Text);
+        Assert.Equal(new SentFile("harbour.jpg", "image/jpeg"), opened.File);
+        Assert.Equal(photo, await toms.OpenFileAsync(opened.Message));   // sealed to Tom's certificate, opened with his key
+    }
+
+    [Fact]
     public async Task After_somebody_leaves_the_next_message_rekeys_by_itself_and_the_leaver_reads_nothing_new()
     {
         var (anna, tom, eve) = (Person("Anna"), Person("Tom"), Person("Eve"));

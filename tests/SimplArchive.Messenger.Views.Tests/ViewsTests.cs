@@ -106,6 +106,22 @@ public sealed class ViewsTests
         Assert.True(plain.Single(r => r.IsMe).CanLeave);
     }
 
+    [Fact]
+    public void A_file_shows_on_its_bubble_cannot_be_edited_and_is_quoted_by_its_name()
+    {
+        CultureInfo.CurrentUICulture = new CultureInfo("en");
+        var chat = new Conversation { IsDirect = true, CounterpartName = "Tom", Members = [new Member { UserId = Tom, DisplayName = "Tom" }] };
+        var photo = Opened(Me, string.Empty, MessageState.Readable, links: ["edit", "delete"]) with { File = new SentFile("harbour.jpg", "image/jpeg") };
+        var reply = Opened(Tom, "Nice", MessageState.Readable, replyTo: photo.Message.Id);
+
+        var rows = ThreadRows.Build(chat, [photo, reply], Me);
+
+        Assert.Equal(new SentFile("harbour.jpg", "image/jpeg"), rows[0].File);
+        Assert.False(rows[0].CanEdit);                // its text is sealed with the file's name and type
+        Assert.True(rows[0].CanDeleteForEveryone);
+        Assert.Equal("You: 📎 harbour.jpg", rows[1].Quote);
+    }
+
     private static OpenedMessage Opened(Guid sender, string? text, MessageState state, Guid? replyTo = null, bool edited = false, string[]? links = null) =>
         new(new Message
         {
