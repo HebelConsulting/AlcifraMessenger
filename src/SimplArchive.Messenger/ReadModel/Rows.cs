@@ -99,6 +99,10 @@ public sealed class ReadReceipt
 /// A conversation brought in from a backup (core #1813). Its folder here has a new id, but its messages are bound to the
 /// one they were sealed under, so that is kept; a second member restoring the same conversation joins this one.
 /// </summary>
+/// <remarks>
+/// Not concurrency-tracked, by the owner's exemption (2026-10-17): it is written by a restore, never edited by a person
+/// from what they saw, so there is no precondition to carry; a second restore only adds keys and members beside it.
+/// </remarks>
 public sealed class RestoredConversation
 {
     public Guid ConversationId { get; set; }
@@ -117,6 +121,7 @@ public sealed class RestoredConversation
 }
 
 /// <summary>A member of a restored conversation as the backup names them: their id there, which the messages are bound to.</summary>
+/// <remarks>Not concurrency-tracked, by the owner's exemption (2026-10-17): append-only, never changed once written.</remarks>
 public sealed class OriginMember
 {
     public Guid ConversationId { get; set; }
