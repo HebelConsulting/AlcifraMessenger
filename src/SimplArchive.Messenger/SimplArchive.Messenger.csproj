@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <!-- The module's own version; the ABI package below is the contract it is written against. -->
-    <Version>0.2.0</Version>
+    <Version>0.3.0</Version>
     <AssemblyName>SimplArchive.Messenger</AssemblyName>
     <RootNamespace>SimplArchive.Messenger</RootNamespace>
     <PackageId>SimplArchive.Messenger</PackageId>

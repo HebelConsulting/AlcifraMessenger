@@ -26,6 +26,19 @@ public sealed class MessengerScreens(ChatSession session, Color accent, IFileHan
     /// <summary>The caller's conversations: where the Messages tile opens.</summary>
     public Page Conversations() => new ConversationsPage(this);
 
+    /// <summary>
+    /// Where a "new messages" push opens: the list, then that conversation's thread above it, so Back returns to the
+    /// list. Null when <paramref name="conversationId"/> is none of the caller's conversations (another module's signal,
+    /// or one they have left since), so the host opens what it would have opened anyway.
+    /// </summary>
+    public async Task<IReadOnlyList<Page>?> OpenAtAsync(Guid conversationId, CancellationToken cancellationToken = default)
+    {
+        var list = await session.Api.ConversationsAsync(cancellationToken);
+        return list.Items.FirstOrDefault(c => c.Id == conversationId) is { } conversation
+            ? [Conversations(), Thread(conversation)]
+            : null;
+    }
+
     internal ChatSession Session => session;
 
     internal Color Accent => accent;
