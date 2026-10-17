@@ -9,6 +9,9 @@ public sealed record ThreadRow(
     Message Message, bool IsMine, string? SenderName, string Text, bool IsPlaceholder, string? Quote, string Footer,
     bool CanReply, bool CanEdit, bool CanDeleteForEveryone)
 {
+    /// <summary>The file the message carries, opened on a tap; null for text alone.</summary>
+    public SentFile? File { get; init; }
+
     /// <summary>The opened text, for an edit to start from; null when there is none to edit.</summary>
     public string? EditableText { get; init; }
 }
@@ -44,10 +47,12 @@ public static class ThreadRows
                 conversation.IsDirect || mine ? null : NameOf(o.Message.SenderUserId, names, me),
                 text, placeholder, quote, footer,
                 CanReply: readable,
-                CanEdit: mine && readable && o.Message.Offers("edit"),
+                // A message carrying a file is not edited: its text is sealed together with the file's name and type.
+                CanEdit: mine && readable && o.File is null && o.Message.Offers("edit"),
                 CanDeleteForEveryone: mine && o.State != MessageState.Deleted && o.Message.Offers("delete"))
             {
-                EditableText = mine && readable ? o.Text : null,
+                EditableText = mine && readable && o.File is null ? o.Text : null,
+                File = readable ? o.File : null,
             };
         })];
     }
@@ -61,6 +66,7 @@ public static class ThreadRows
 
     private static string Excerpt(OpenedMessage message) => message.State switch
     {
+        MessageState.Readable when message.File is { } file && string.IsNullOrEmpty(message.Text) => $"📎 {file.Name}",
         MessageState.Readable when message.Text is { } text => text.Length <= 60 ? text : $"{text[..57]}…",
         MessageState.Deleted => ViewText.Get("Deleted"),
         _ => ViewText.Get("CannotOpen"),

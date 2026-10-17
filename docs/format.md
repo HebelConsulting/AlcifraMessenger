@@ -35,7 +35,9 @@ assoc.   = 0x01 ‖ conversation id (16) ‖ epoch (4, big-endian) ‖ message i
 
 A file is a document in the archive: a CMS EnvelopedData of its bytes addressed to every member's certificates at the
 time it is sent (the same recipients as above), so it opens with the member's own key outside the Messenger too. A
-message carrying a file names the document and seals its file name and type with its text.
+message carrying a file names the document and seals its file name and type with its text: its plaintext is then the
+UTF-8 JSON object `{"text": …, "name": …, "type": …}` instead of the bare text. Which of the two a message holds is
+told by the message itself — whether it names an attachment — never guessed from the bytes.
 
 ## Not in version 1
 

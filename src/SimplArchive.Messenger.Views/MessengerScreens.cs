@@ -4,10 +4,24 @@ using SimplArchive.Messenger.Client.Api;
 namespace SimplArchive.Messenger.Views;
 
 /// <summary>
-/// The Messenger's screens for a host app: what the host supplies — its <see cref="ChatSession"/> (signed-in connection,
-/// hardware-key opener) and its accent colour — is a constructor argument, so leaving one out does not compile.
+/// How an opened file leaves the app, as the host already hands on a sealed document: another app shows it, or the share
+/// sheet sends it on. The host cleans its copies up as it does its own.
 /// </summary>
-public sealed class MessengerScreens(ChatSession session, Color accent)
+public interface IFileHandoff
+{
+    /// <summary>Offers the apps that can show the file.</summary>
+    Task OpenWithAsync(byte[] content, string fileName, string contentType);
+
+    /// <summary>Offers the system share sheet.</summary>
+    Task ShareAsync(byte[] content, string fileName, string contentType);
+}
+
+/// <summary>
+/// The Messenger's screens for a host app: what the host supplies — its <see cref="ChatSession"/> (signed-in connection,
+/// hardware-key opener), its accent colour and how a file is handed on — is a constructor argument, so leaving one out
+/// does not compile.
+/// </summary>
+public sealed class MessengerScreens(ChatSession session, Color accent, IFileHandoff handoff)
 {
     /// <summary>The caller's conversations: where the Messages tile opens.</summary>
     public Page Conversations() => new ConversationsPage(this);
@@ -15,6 +29,8 @@ public sealed class MessengerScreens(ChatSession session, Color accent)
     internal ChatSession Session => session;
 
     internal Color Accent => accent;
+
+    internal IFileHandoff Handoff => handoff;
 
     internal Page Thread(Conversation conversation) => new ThreadPage(this, conversation);
 

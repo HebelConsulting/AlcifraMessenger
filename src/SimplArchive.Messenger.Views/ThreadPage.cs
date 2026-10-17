@@ -58,9 +58,13 @@ internal sealed class ThreadPage : ContentPage
         _compose.Completed += async (_, _) => await SendAsync();
         var send = new Button { Text = ViewText.Get("Send"), BackgroundColor = screens.Accent, TextColor = Colors.White };
         send.Clicked += async (_, _) => await SendAsync();
-        var composeBar = new Grid { Padding = new Thickness(8, 6), ColumnSpacing = 8, ColumnDefinitions = [new(GridLength.Star), new(GridLength.Auto)] };
-        composeBar.Add(_compose, 0);
-        composeBar.Add(send, 1);
+        var attach = new Button { Text = "+", FontSize = 22, BackgroundColor = Colors.Transparent, TextColor = screens.Accent, Padding = 0, WidthRequest = 44 };
+        SemanticProperties.SetDescription(attach, ViewText.Get("Attach"));
+        attach.Clicked += async (_, _) => await AttachAsync();
+        var composeBar = new Grid { Padding = new Thickness(8, 6), ColumnSpacing = 8, ColumnDefinitions = [new(GridLength.Auto), new(GridLength.Star), new(GridLength.Auto)] };
+        composeBar.Add(attach, 0);
+        composeBar.Add(_compose, 1);
+        composeBar.Add(send, 2);
 
         var page = new Grid { RowDefinitions = [new(GridLength.Star), new(GridLength.Auto), new(GridLength.Auto)] };
         page.Add(_list, 0, 0);
@@ -124,9 +128,85 @@ internal sealed class ThreadPage : ContentPage
         await LoadAsync();
     }
 
+    // A photo or a file, sealed to every member and sent with whatever is typed as its caption (core #1809).
+    private async Task AttachAsync()
+    {
+        if (_page is null)
+        {
+            return;
+        }
+
+        var chosen = await DisplayActionSheetAsync(ViewText.Get("Attach"), ViewText.Get("Cancel"), null,
+            ViewText.Get("TakePhoto"), ViewText.Get("ChoosePhoto"), ViewText.Get("ChooseFile"));
+        try
+        {
+            FileResult? file = chosen == ViewText.Get("TakePhoto") ? await MediaPicker.Default.CapturePhotoAsync()
+                : chosen == ViewText.Get("ChoosePhoto") ? (await MediaPicker.Default.PickPhotosAsync(new MediaPickerOptions { SelectionLimit = 1 })).FirstOrDefault()
+                : chosen == ViewText.Get("ChooseFile") ? await FilePicker.Default.PickAsync()
+                : null;
+            if (file is null)
+            {
+                return;
+            }
+
+            byte[] content;
+            await using (var stream = await file.OpenReadAsync())
+            using (var buffer = new MemoryStream())
+            {
+                await stream.CopyToAsync(buffer);
+                content = buffer.ToArray();
+            }
+
+            if (content.LongLength > MaxFileBytes)
+            {
+                await DisplayAlertAsync(ViewText.Get("Failed"), ViewText.Get("FileTooLarge"), ViewText.Get("OK"));
+                return;
+            }
+
+            await _screens.Session.SendFileAsync(_conversation, _page, content, file.FileName,
+                file.ContentType ?? "application/octet-stream", _compose.Text?.Trim() ?? string.Empty);
+            _compose.Text = string.Empty;
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            await MessengerScreens.ShowAsync(this, exception);
+        }
+
+        await LoadAsync();
+    }
+
+    // The server takes 100 MB; sealing adds a little, so the phone stops short of it.
+    private const long MaxFileBytes = 95L * 1024 * 1024;
+
+    // A tap opens it, with the key (one use per file): a photo in the app, anything else handed on as a sealed document is.
+    private async Task OpenFileAsync(ThreadRow row)
+    {
+        try
+        {
+            var content = await _screens.Session.OpenFileAsync(row.Message);
+            if (row.File!.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+            {
+                await Navigation.PushAsync(new PhotoPage(_screens.Handoff, content, row.File.Name, row.File.ContentType));
+            }
+            else
+            {
+                await _screens.Handoff.OpenWithAsync(content, row.File.Name, row.File.ContentType);
+            }
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            await MessengerScreens.ShowAsync(this, exception);
+        }
+    }
+
     private async Task ActAsync(ThreadRow row)
     {
         var actions = new List<string>();
+        if (row.File is not null)
+        {
+            actions.Add(ViewText.Get("Open"));
+        }
+
         if (row.CanReply)
         {
             actions.Add(ViewText.Get("Reply"));
@@ -146,6 +226,12 @@ internal sealed class ThreadPage : ContentPage
         var chosen = await DisplayActionSheetAsync(null, ViewText.Get("Cancel"), null, [.. actions]);
         try
         {
+            if (chosen == ViewText.Get("Open"))
+            {
+                await OpenFileAsync(row);
+                return;
+            }
+
             if (chosen == ViewText.Get("Reply"))
             {
                 Reply(row);
@@ -215,8 +301,9 @@ internal sealed class ThreadPage : ContentPage
         var quote = new Label { FontSize = 12, LineBreakMode = LineBreakMode.TailTruncation, MaxLines = 2 };
         var quoteBox = new Border { StrokeThickness = 0, Padding = new Thickness(8, 4), StrokeShape = new RoundRectangle { CornerRadius = 6 }, Content = quote };
         var text = new Label { FontSize = 16 };
+        var fileChip = new Label { FontSize = 15, FontAttributes = FontAttributes.Bold, LineBreakMode = LineBreakMode.MiddleTruncation };
         var footer = new Label { FontSize = 11, HorizontalTextAlignment = TextAlignment.End };
-        var body = new VerticalStackLayout { Spacing = 3, Children = { sender, quoteBox, text, footer } };
+        var body = new VerticalStackLayout { Spacing = 3, Children = { sender, quoteBox, fileChip, text, footer } };
         var bubble = new Border
         {
             StrokeThickness = 0,
@@ -239,6 +326,10 @@ internal sealed class ThreadPage : ContentPage
             var ink = r.IsMine ? Colors.White : Colors.Black;
             text.TextColor = ink;
             text.Text = r.Text;
+            text.IsVisible = r.File is null || r.Text.Length > 0;
+            fileChip.IsVisible = r.File is not null;
+            fileChip.TextColor = ink;
+            fileChip.Text = r.File is { } f ? $"📎 {f.Name}" : null;
             text.FontAttributes = r.IsPlaceholder ? FontAttributes.Italic : FontAttributes.None;
             footer.TextColor = r.IsMine ? Colors.White.WithAlpha(0.8f) : Colors.Gray;
             footer.Text = r.Footer;

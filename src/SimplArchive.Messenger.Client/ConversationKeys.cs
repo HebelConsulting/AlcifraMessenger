@@ -3,10 +3,14 @@ using System.Security.Cryptography.X509Certificates;
 
 namespace SimplArchive.Messenger.Client;
 
-/// <summary>Opens a member's sealed copy of a conversation key: what the app supplies, with the member's hardware key.</summary>
+/// <summary>
+/// Opens a CMS envelope addressed to the member's certificates — a conversation key, or a file sent in a conversation:
+/// what the app supplies, with the member's hardware key.
+/// </summary>
 public interface IConversationKeyOpener
 {
-    /// <summary>The 32-byte key inside <paramref name="wrappedKey"/>, a CMS envelope addressed to the member's certificates.</summary>
+    /// <summary>The content of <paramref name="wrappedKey"/>, a CMS envelope addressed to the member's certificates: a
+    /// 32-byte conversation key, or a file's bytes.</summary>
     Task<byte[]> OpenAsync(byte[] wrappedKey, CancellationToken cancellationToken = default);
 }
 
