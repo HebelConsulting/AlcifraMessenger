@@ -9,6 +9,5 @@
     <Project Path="tests/SimplArchive.Keys.Tests/SimplArchive.Keys.Tests.csproj" />
     <Project Path="tests/SimplArchive.Messenger.Client.Tests/SimplArchive.Messenger.Client.Tests.csproj" />
     <Project Path="tests/SimplArchive.Messenger.Tests/SimplArchive.Messenger.Tests.csproj" />
-    <Project Path="tests/SimplArchive.Messenger.Views.Tests/SimplArchive.Messenger.Views.Tests.csproj" />
   </Folder>
 </Solution>

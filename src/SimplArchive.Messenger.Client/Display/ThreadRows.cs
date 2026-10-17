@@ -2,7 +2,7 @@ using System.Globalization;
 using SimplArchive.Messenger.Client;
 using SimplArchive.Messenger.Client.Api;
 
-namespace SimplArchive.Messenger.Views;
+namespace SimplArchive.Messenger.Client.Display;
 
 /// <summary>One bubble as the thread draws it: whose, what it says, what it quotes, and what may be done with it.</summary>
 public sealed record ThreadRow(

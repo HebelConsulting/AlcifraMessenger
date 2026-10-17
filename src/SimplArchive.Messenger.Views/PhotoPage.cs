@@ -1,3 +1,4 @@
+using SimplArchive.Messenger.Client.Display;
 namespace SimplArchive.Messenger.Views;
 
 /// <summary>An opened photo, shown in the app from memory; Open with and Share hand it on as a sealed document is.</summary>
