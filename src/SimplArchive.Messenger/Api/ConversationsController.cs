@@ -11,7 +11,7 @@ namespace SimplArchive.Messenger.Api;
 [ApiController]
 [Authorize]
 [Route(Base)]
-public sealed class ConversationsController(Conversations conversations, Messages messages, IModuleArchiveFacade archive) : ControllerBase
+public sealed class ConversationsController(Conversations conversations, Messages messages, Restores restores, IModuleArchiveFacade archive) : ControllerBase
 {
     public const string Base = "api/modules/messenger/conversations";
 
@@ -20,7 +20,13 @@ public sealed class ConversationsController(Conversations conversations, Message
         new ConversationListResource
         {
             Items = [.. (await conversations.MineAsync(cancellationToken)).Select(Resource)],
-            Links = [new Link("self", $"/{Base}", "GET"), new Link("open-direct", $"/{Base}/direct", "POST"), new Link("create-group", $"/{Base}", "POST")],
+            Links =
+            [
+                new Link("self", $"/{Base}", "GET"),
+                new Link("open-direct", $"/{Base}/direct", "POST"),
+                new Link("create-group", $"/{Base}", "POST"),
+                new Link("restore", $"/{Base}/restores", "POST"),
+            ],
         };
 
     // Standing convention: every GET has its own HEAD.
@@ -100,6 +106,26 @@ public sealed class ConversationsController(Conversations conversations, Message
         return NoContent();
     }
 
+    /// <summary>One conversation of a backup (core #1813): created as read-only history, or joined when another member restored it.</summary>
+    [HttpPost("restores")]
+    public async Task<ActionResult<ConversationResource>> Restore([FromBody] RestoreRequest request, CancellationToken cancellationToken)
+    {
+        var id = await restores.BeginAsync(new Restores.Request(
+            request.OriginConversationId, request.OriginInstance, request.Name,
+            [.. request.Members.Select(m => new Restores.Origin(m.UserId, m.Email, m.DisplayName))],
+            request.MyUserId, request.Keys.ToDictionary(k => k.Epoch, k => k.Key)), cancellationToken);
+        return Resource(await conversations.MemberViewAsync(id, cancellationToken));
+    }
+
+    /// <summary>A batch of a restored conversation's messages, ids kept; those already here are skipped.</summary>
+    [HttpPost("{id:guid}/imports")]
+    public async Task<ActionResult<ImportResultResource>> Import(Guid id, [FromBody] ImportRequest request, CancellationToken cancellationToken)
+    {
+        var (imported, skipped) = await restores.ImportAsync(id, [.. request.Messages.Select(m => new Restores.ImportedMessage(
+            m.Id, m.Epoch, m.SenderUserId, m.SentAt, m.EditedAt, m.DeletedAt, m.ReplyToId, m.AttachmentDocumentId, m.Ciphertext))], cancellationToken);
+        return new ImportResultResource { Imported = imported, Skipped = skipped };
+    }
+
     [HttpPut("{id:guid}/receipt")]
     public async Task<IActionResult> MarkRead(Guid id, [FromBody] ReceiptRequest request, CancellationToken cancellationToken)
     {
@@ -131,7 +157,9 @@ public sealed class ConversationsController(Conversations conversations, Message
                 IsAdmin = view.AdminIds.Contains(m),
                 DisplayName = view.Names.GetValueOrDefault(m, string.Empty),
                 ReadUpTo = view.ReadUpTo.TryGetValue(m, out var read) ? read : null,
-                Links =
+                Email = view.Emails.GetValueOrDefault(m, string.Empty),
+                // A restored conversation's members are the backup's, by their ids there: no certificates, nothing to change.
+                Links = view.Restored is not null ? [] :
                 [
                     // Whose certificates a new epoch's key is sealed to: every member's, on every rekey.
                     new Link("certificates", $"/{PeopleController.Base}/{m}/certificates", "GET"),
@@ -145,12 +173,19 @@ public sealed class ConversationsController(Conversations conversations, Message
             Admins = [.. view.Admins],
             Unread = view.Unread,
             CanManageMembers = !view.IsDirect && view.IAmAdmin,
+            SealedUnderId = view.SealedUnder,
+            MyUserId = view.MyOriginUserId ?? view.Me,
+            Restored = view.Restored is not null,
+            RestoredFrom = view.Restored?.OriginInstance,
+            IsReadOnly = view.IsReadOnly,
             Links =
             [
                 new Link("self", self, "GET"),
                 new Link("messages", $"{self}/messages", "GET"),
                 new Link("receipt", $"{self}/receipt", "PUT"),
+                // A restore files a backup's files here too, before importing the messages that carry them.
                 new Link("upload-file", $"{self}/files", "POST"),
+                .. view.Restored is not null ? [new Link("import", $"{self}/imports", "POST")] : Array.Empty<Link>(),
                 .. !view.IsDirect && view.IAmAdmin ? [new Link("add-member", $"{self}/members", "POST")] : Array.Empty<Link>(),
                 .. view.NeedsNewEpoch ? [new Link("publish-epoch", $"{self}/epochs", "POST")] : Array.Empty<Link>(),
             ],

@@ -160,6 +160,30 @@ own chat folder.
 - *Delete for me* removes your reference; *delete for everyone* removes the file for all.
 
 // ─────────────────────────────────────────────────────────────────────────────
+= Backing up and restoring
+
+A *backup*#idx("backup") holds all of your conversations in one file, *sealed only*: the messages as they were
+delivered, your own sealed copy of each conversation key, and each file as the envelope it was sent as. Nothing is
+decrypted to make it, so it opens only with a key whose certificate it was sealed to.
+
+```
+saconsole messenger backup --out conversations.simplarchive-messages
+saconsole messenger restore --file conversations.simplarchive-messages
+```
+
+- *Restoring on another installation.* Each conversation comes back as *history*, marked *Restored* and read-only: you
+  read it with your own key, nothing more is sent into it. Its messages carry a small *restored* mark, because the
+  format has no sender signatures — they are as trustworthy as whoever restored them.
+- *Only your own.* A backup is restored by the person it belongs to: the installation checks that its owner's e-mail is
+  yours.
+- *Twice changes nothing.* Messages keep their ids; what is already there is skipped. A second member restoring the
+  same conversation joins it rather than making another.
+- *Checked first.* Every entry is checked against the backup's own list of hashes before anything is restored; a
+  changed or damaged backup is refused as a whole.
+- *Bound to your keys at the time.* A key enrolled only later cannot open older content; a renewed certificate on the
+  same key can. A second enrolled key — a spare card — is your insurance.
+
+// ─────────────────────────────────────────────────────────────────────────────
 = What the server can see
 
 #table(
@@ -191,7 +215,8 @@ For those who audit it:
 // ─────────────────────────────────────────────────────────────────────────────
 = Not yet
 
-- *Backing up and restoring* a user's conversations, also onto another instance, is in preparation.
+- *Continuing a restored conversation* with the members who are on the new installation too, *restoring conversations
+  you have left*, and backing up from the phone on a schedule are in preparation.
 - *Disappearing messages* are not offered.
 
 #index-page()

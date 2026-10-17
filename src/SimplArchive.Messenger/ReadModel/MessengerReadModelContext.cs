@@ -16,6 +16,8 @@ public sealed class MessengerReadModelContext(DbContextOptions options) : Module
     public DbSet<Message> Messages => Set<Message>();
     public DbSet<HiddenMessage> HiddenMessages => Set<HiddenMessage>();
     public DbSet<ReadReceipt> ReadReceipts => Set<ReadReceipt>();
+    public DbSet<RestoredConversation> RestoredConversations => Set<RestoredConversation>();
+    public DbSet<OriginMember> OriginMembers => Set<OriginMember>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -48,6 +50,17 @@ public sealed class MessengerReadModelContext(DbContextOptions options) : Module
         var receipt = modelBuilder.Entity<ReadReceipt>().ToTable("msg_receipts");
         receipt.HasKey(r => new { r.ConversationId, r.UserId });
         receipt.HasIndex(r => r.TenantId);
+
+        var restored = modelBuilder.Entity<RestoredConversation>().ToTable("msg_restored_conversations");
+        restored.HasKey(r => r.ConversationId);
+        restored.HasIndex(r => new { r.TenantId, r.OriginConversationId }).IsUnique();
+        restored.Property(r => r.OriginInstance).HasMaxLength(500).IsRequired();
+
+        var origin = modelBuilder.Entity<OriginMember>().ToTable("msg_origin_members");
+        origin.HasKey(o => new { o.ConversationId, o.OriginUserId });
+        origin.HasIndex(o => o.TenantId);
+        origin.Property(o => o.Email).HasMaxLength(320).IsRequired();
+        origin.Property(o => o.DisplayName).HasMaxLength(200).IsRequired();
     }
 }
 

@@ -177,6 +177,27 @@ public sealed class MessengerApi(HttpClient http, HttpClient? storage = null)
         return await response.Content.ReadAsByteArrayAsync(cancellationToken);
     }
 
+    /// <summary>
+    /// Restores one conversation of a backup (core #1813) as read-only history, or joins the one another member restored:
+    /// <paramref name="myKeys"/> are the caller's own sealed keys per epoch, exactly as the backup holds them.
+    /// </summary>
+    public Task<Conversation> RestoreAsync(
+        ConversationList list, Guid originConversationId, string originInstance, string name, IReadOnlyList<BackupMember> members,
+        Guid myUserId, IReadOnlyDictionary<int, byte[]> myKeys, CancellationToken cancellationToken = default) =>
+        SendAsync<Conversation>(Follow(list, "restore"), new
+        {
+            originConversationId,
+            originInstance,
+            name,
+            members = members.Select(m => new { userId = m.UserId, email = m.Email, displayName = m.DisplayName }),
+            myUserId,
+            keys = myKeys.Select(k => new { epoch = k.Key, key = k.Value }),
+        }, cancellationToken);
+
+    /// <summary>Imports a batch of a restored conversation's messages, ids kept; those already there are skipped.</summary>
+    public Task<ImportResult> ImportAsync(Conversation restored, IReadOnlyList<BackupMessage> messages, CancellationToken cancellationToken = default) =>
+        SendAsync<ImportResult>(Follow(restored, "import"), new { messages }, cancellationToken);
+
     private static List<object> Keys(IReadOnlyList<WrappedKey> keys) => [.. keys.Select(k => new { userId = k.UserId, key = k.Key })];
 
     private static Link Follow(Resource resource, string rel) =>

@@ -34,6 +34,8 @@ public static class ThreadRows
     /// <summary>The bubbles of <paramref name="conversation"/>, oldest first.</summary>
     public static IReadOnlyList<ThreadRow> Build(Conversation conversation, IReadOnlyList<OpenedMessage> opened, Guid me)
     {
+        // In a restored conversation the caller's own old messages carry their id where they were sent.
+        me = conversation.MyUserId == Guid.Empty ? me : conversation.MyUserId;
         var byId = opened.ToDictionary(o => o.Message.Id);
         var names = conversation.Members.ToDictionary(m => m.UserId, m => m.DisplayName);
         var receiptOn = ReceiptMessage(conversation, opened, me);
@@ -51,12 +53,13 @@ public static class ThreadRows
                 : null;
             var time = o.Message.SentAt.ToLocalTime().ToString("t", CultureInfo.CurrentCulture);
             var footer = o.Message.EditedAt is not null && o.State == MessageState.Readable ? $"{time} · {ViewText.Get("Edited")}" : time;
+            footer = o.Message.Restored ? $"{footer} · {ViewText.Get("RestoredMark")}" : footer;   // as trustworthy as its restorer
             var readable = o.State == MessageState.Readable;
             return new ThreadRow(
                 o.Message, mine,
                 conversation.IsDirect || mine ? null : NameOf(o.Message.SenderUserId, names, me),
                 text, placeholder, quote, footer,
-                CanReply: readable,
+                CanReply: readable && !conversation.IsReadOnly,
                 // A message carrying a file is not edited: its text is sealed together with the file's name and type.
                 CanEdit: mine && readable && o.File is null && o.Message.Offers("edit"),
                 CanDeleteForEveryone: mine && o.State != MessageState.Deleted && o.Message.Offers("delete"))

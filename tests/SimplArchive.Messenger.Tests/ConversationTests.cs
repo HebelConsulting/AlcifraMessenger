@@ -178,7 +178,7 @@ public sealed class ConversationTests : IDisposable
         // A new epoch, and Eve holds only its key: nothing sent before she joined opens for her, nor is it listed.
         Assert.Equal([3], await _db.EpochKeys.Where(k => k.ConversationId == id && k.UserId == _eve).Select(k => k.Epoch).ToListAsync());
         As(_eve);
-        Assert.Empty(await _messages.PageAsync(id, null, 50, default));
+        Assert.Empty((await _messages.PageAsync(id, null, 50, default)).Page);
     }
 
     [Fact]
@@ -214,13 +214,13 @@ public sealed class ConversationTests : IDisposable
         As(_tom);
         Assert.Equal(2, (await _conversations.MemberViewAsync(id, default)).Unread);
         await _messages.HideForMeAsync(id, first.Id, default);
-        Assert.Single(await _messages.PageAsync(id, null, 50, default));
+        Assert.Single((await _messages.PageAsync(id, null, 50, default)).Page);
         await _messages.MarkReadAsync(id, DateTimeOffset.UtcNow.AddMinutes(1), default);
         await _messages.MarkReadAsync(id, DateTimeOffset.UtcNow.AddYears(-1), default);   // an older device changes nothing
         Assert.Equal(0, (await _conversations.MemberViewAsync(id, default)).Unread);
 
         As(_anna);
-        Assert.Equal(2, (await _messages.PageAsync(id, null, 50, default)).Count);   // still there for Anna
+        Assert.Equal(2, (await _messages.PageAsync(id, null, 50, default)).Page.Count);   // still there for Anna
     }
 
     [Fact]
