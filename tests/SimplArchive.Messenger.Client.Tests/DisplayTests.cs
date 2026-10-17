@@ -1,10 +1,11 @@
+using SimplArchive.Messenger.Client.Display;
 using System.Globalization;
 using SimplArchive.Messenger.Client;
 using SimplArchive.Messenger.Client.Api;
 
-namespace SimplArchive.Messenger.Views.Tests;
+namespace SimplArchive.Messenger.Client.Tests;
 
-public sealed class ViewsTests
+public sealed class DisplayTests
 {
     private static readonly Guid Me = Guid.NewGuid(), Tom = Guid.NewGuid();
 

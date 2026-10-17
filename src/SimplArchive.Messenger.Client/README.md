@@ -12,5 +12,10 @@ The client side of the SimplArchive Messenger, free of any user interface:
   server advertises. The app supplies its signed-in `HttpClient`; presigned file transfers use a separate client that
   never carries the archive's token. A refusal arrives as `MessengerApiException` with the server's code
   (`ETAG_MISMATCH`, `MESSENGER_NO_KEY`, …).
+- `ChatSession` is a member's session: it opens, sends and continues conversations; `MessengerBackup` writes and
+  restores a sealed backup.
+- `Display` holds what every app must show alike, free of any user interface: `ThreadRows` (a thread's bubbles —
+  sender, quote, the "restored" mark, the receipt line), `MemberRows`, and `ViewText`, the texts in English, German,
+  Italian and Spanish. The phone's screens and the desktop's tab both draw from it.
 
 The format is specified in the repository's `docs/format.md`. Apache License 2.0.

@@ -1,6 +1,6 @@
 using System.Globalization;
 
-namespace SimplArchive.Messenger.Views;
+namespace SimplArchive.Messenger.Client.Display;
 
 /// <summary>
 /// The screens' texts in English, German, Italian and Spanish — the languages the SimplArchive apps speak — chosen by the

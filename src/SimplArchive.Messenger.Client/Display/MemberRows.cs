@@ -1,6 +1,6 @@
 using SimplArchive.Messenger.Client.Api;
 
-namespace SimplArchive.Messenger.Views;
+namespace SimplArchive.Messenger.Client.Display;
 
 /// <summary>A member as the members page draws them, and what the caller may do with them — from the server's links.</summary>
 public sealed record MemberRow(Member Member, string Name, bool IsMe, bool IsAdmin, bool CanMakeAdmin, bool CanRevokeAdmin, bool CanRemove, bool CanLeave)
