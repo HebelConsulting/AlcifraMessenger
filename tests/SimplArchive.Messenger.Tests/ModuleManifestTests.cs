@@ -32,6 +32,13 @@ public class ModuleManifestTests
     }
 
     [Fact]
+    public void It_needs_no_licence_because_it_is_free_and_open_source()
+    {
+        // Owner, 2026-10-17 (core ADR 0944): activated without a licence file, anywhere; nothing lapses.
+        Assert.False(((IIndustryModule)_module).RequiresLicence);
+    }
+
+    [Fact]
     public void It_licenses_certificate_enrolment_because_it_encrypts_to_users()
     {
         Assert.True(_module.LicensesCertificateEnrolment);

@@ -48,7 +48,8 @@ take part, and only those with an enrolled key.
 Everything a member writes or sends is *sealed on their own device*#idx("sealed") to the keys of the conversation's
 members, and opened only on a member's device. The server stores and forwards what it cannot read.
 
-The Messenger is a *separately licensed module*, activated per tenant. Its clients are the SimplArchive apps: the
+The Messenger is a *free, open-source module*: it needs no licence, and a tenant administrator activates it for the
+tenant. Its clients are the SimplArchive apps: the
 phone app's Messages tile comes first (in preparation), the desktop client next. The web client stays out, because a
 browser cannot reach a hardware key.
 
@@ -58,13 +59,14 @@ A member is a user of the tenant with *at least one enrolled certificate*#idx("e
 hold — a smart card, a security key, a phone's key. Nothing can be sealed to someone without one, so they cannot be
 added, and the people picker does not offer them.
 
-While the Messenger is active, it *licenses certificate enrolment*: the archive offers enrolment to its users, and the
+While the Messenger is active, the archive *offers certificate enrolment* to its users, and the
 certificates they enrol are the ones conversations are sealed to.
 
 // ─────────────────────────────────────────────────────────────────────────────
 = Setting it up
 
-+ *Activate the module* for the tenant, with its licence.
++ *Activate the module* for the tenant — no licence is needed, and it never lapses. This repository's standalone start
+  (`demo/up.sh`) activates it by itself.
 + *Choose where conversations are filed.* The module's setting _Where conversations are filed_#idx("repository
   setting") takes the id of a repository or folder. Group conversations and the shared folders of one-to-one chats are
   created there. Give it an administrator's rights only: each member gets access to their own conversations and
@@ -72,6 +74,7 @@ certificates they enrol are the ones conversations are sealed to.
 + *Let people enrol.* Members need an enrolled certificate before anyone can start a conversation with them.
 
 ```sh
+saconsole module activate --module messenger
 echo <repository id> | saconsole module settings set messenger messenger.repositoryId --stdin
 ```
 
