@@ -19,8 +19,6 @@ ROOT="$(cd .. && pwd)"
 CORE="$(cd "${SIMPLARCHIVE_CORE:-../../SimplArchive}" 2>/dev/null && pwd || true)"
 [ -n "$CORE" ] || { echo "ERROR: no core checkout at ${SIMPLARCHIVE_CORE:-../../SimplArchive} (clone https://github.com/HebelConsulting/SimplArchive beside this repository, or set SIMPLARCHIVE_CORE)"; exit 1; }
 export SIMPLARCHIVE_CORE="$CORE"   # docker-compose.yaml includes the core's stack from the same place
-VENDOR_KEY="${VENDOR_KEY:-$HOME/dev/SimplArchiveFlightSchool/.local/vendor-signing-key.pem}"
-[ -f "$VENDOR_KEY" ] || { echo "ERROR: no vendor signing key at $VENDOR_KEY (set VENDOR_KEY)"; exit 1; }
 HOST=http://localhost:8080
 
 echo "==> Building the Messenger module…"
