@@ -194,6 +194,9 @@ public sealed class RestoreRequest
     public Guid MyUserId { get; set; }
 
     public List<EpochKeyResource> Keys { get; set; } = [];
+
+    /// <summary>A one-to-one chat where it was sealed.</summary>
+    public bool IsDirect { get; set; }
 }
 
 public sealed class OriginMemberRequest
@@ -228,4 +231,41 @@ public sealed class ImportResultResource
 
     /// <summary>Already here, from an earlier restore of the same backup or another member's.</summary>
     public int Skipped { get; set; }
+}
+
+/// <summary>Who a restored conversation's members are here, and whether it can continue.</summary>
+public sealed class ContinuationResource : HypermediaResource
+{
+    public bool IsDirect { get; set; }
+
+    /// <summary>The name a continued group gets: the original one.</summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>For a one-to-one chat, the chat with that person already started here, which continuing joins.</summary>
+    public Guid? ExistingConversationId { get; set; }
+
+    public List<ContinuationMemberResource> Members { get; set; } = [];
+
+    /// <summary>The members nobody here matches (by e-mail, with an enrolled key): while any are, it stays history.</summary>
+    public List<string> Missing { get; set; } = [];
+
+    /// <summary>Every member is here: POST to <c>self</c> continues it.</summary>
+    public bool CanContinue { get; set; }
+}
+
+/// <summary>An old member and who they are here, with the certificates the live conversation's key is sealed to.</summary>
+public sealed class ContinuationMemberResource : HypermediaResource
+{
+    public Guid OriginUserId { get; set; }
+    public string Email { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
+
+    /// <summary>Their user id here; null when nobody here matches.</summary>
+    public Guid? UserId { get; set; }
+}
+
+/// <summary>A new key for every member of the live conversation; empty when a one-to-one chat joins the one already here.</summary>
+public sealed class ContinueRequest
+{
+    public List<KeyRequest> Keys { get; set; } = [];
 }

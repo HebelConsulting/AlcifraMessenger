@@ -116,8 +116,17 @@ public sealed class RestoredConversation
 
     public DateTimeOffset RestoredAt { get; set; }
 
-    /// <summary>Archived history: nothing is sent, edited or rekeyed. Resuming the conversation clears it.</summary>
+    /// <summary>Archived history: nothing is sent, edited or rekeyed into it. Continuing it opens a live conversation instead.</summary>
     public bool IsReadOnly { get; set; }
+
+    /// <summary>A one-to-one chat where it was sealed: continuing it means the chat with that person here.</summary>
+    public bool IsDirect { get; set; }
+
+    /// <summary>
+    /// The live conversation this history now sits before (core #1813): its members see it above that thread. Null until
+    /// a member continued it.
+    /// </summary>
+    public Guid? ContinuedInConversationId { get; set; }
 }
 
 /// <summary>A member of a restored conversation as the backup names them: their id there, which the messages are bound to.</summary>

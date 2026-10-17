@@ -184,11 +184,22 @@ public sealed class MessengerApi(HttpClient http, HttpClient? storage = null)
     public Task<Conversation> RestoreAsync(
         ConversationList list, Guid originConversationId, string originInstance, string name, IReadOnlyList<BackupMember> members,
         Guid myUserId, IReadOnlyDictionary<int, byte[]> myKeys, CancellationToken cancellationToken = default) =>
+        RestoreAsync(list, originConversationId, originInstance, name, false, members, myUserId, myKeys, cancellationToken);
+
+    /// <summary>
+    /// As <see cref="RestoreAsync(ConversationList, Guid, string, string, IReadOnlyList{BackupMember}, Guid, IReadOnlyDictionary{int, byte[]}, CancellationToken)"/>,
+    /// saying whether it was a one-to-one chat, which continues as the chat with that person. An overload, not an optional
+    /// parameter: a caller compiled against the earlier signature keeps binding to it.
+    /// </summary>
+    public Task<Conversation> RestoreAsync(
+        ConversationList list, Guid originConversationId, string originInstance, string name, bool isDirect, IReadOnlyList<BackupMember> members,
+        Guid myUserId, IReadOnlyDictionary<int, byte[]> myKeys, CancellationToken cancellationToken = default) =>
         SendAsync<Conversation>(Follow(list, "restore"), new
         {
             originConversationId,
             originInstance,
             name,
+            isDirect,
             members = members.Select(m => new { userId = m.UserId, email = m.Email, displayName = m.DisplayName }),
             myUserId,
             keys = myKeys.Select(k => new { epoch = k.Key, key = k.Value }),
@@ -197,6 +208,21 @@ public sealed class MessengerApi(HttpClient http, HttpClient? storage = null)
     /// <summary>Imports a batch of a restored conversation's messages, ids kept; those already there are skipped.</summary>
     public Task<ImportResult> ImportAsync(Conversation restored, IReadOnlyList<BackupMessage> messages, CancellationToken cancellationToken = default) =>
         SendAsync<ImportResult>(Follow(restored, "import"), new { messages }, cancellationToken);
+
+    /// <summary>Who a restored conversation's members are here: whether it can continue, and whose certificates its key needs.</summary>
+    public Task<Continuation> ContinuationAsync(Conversation restored, CancellationToken cancellationToken = default) =>
+        GetAsync<Continuation>(Follow(restored, "continuation").Href, cancellationToken);
+
+    /// <summary>
+    /// Continues restored history as a live conversation, in one request: <paramref name="keys"/> is a new key for every
+    /// member (empty when a one-to-one chat joins the one already here). Returns the live conversation.
+    /// </summary>
+    public Task<Conversation> ContinueAsync(Continuation continuation, IReadOnlyList<WrappedKey> keys, CancellationToken cancellationToken = default) =>
+        SendAsync<Conversation>(new Link("continue", Follow(continuation, "self").Href, "POST"), new { keys = Keys(keys) }, cancellationToken);
+
+    /// <summary>The restored history shown above a live conversation, as far as the caller holds its keys.</summary>
+    public Task<ConversationList> EarlierAsync(Conversation live, CancellationToken cancellationToken = default) =>
+        GetAsync<ConversationList>(Follow(live, "earlier").Href, cancellationToken);
 
     private static List<object> Keys(IReadOnlyList<WrappedKey> keys) => [.. keys.Select(k => new { userId = k.UserId, key = k.Key })];
 

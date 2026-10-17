@@ -118,7 +118,7 @@ public static class MessengerBackup
             Conversation restored;
             try
             {
-                restored = await api.RestoreAsync(list, record.Id, manifest.Instance, record.Name, record.Members, record.MyUserId,
+                restored = await api.RestoreAsync(list, record.Id, manifest.Instance, record.Name, record.IsDirect, record.Members, record.MyUserId,
                     record.Keys.ToDictionary(k => k.Epoch, k => k.Key), cancellationToken);
             }
             catch (MessengerApiException refused) when (refused.Code == "MESSENGER_STILL_HERE")

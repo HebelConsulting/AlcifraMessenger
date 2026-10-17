@@ -62,4 +62,10 @@ public static class MessengerErrors
 
     public static ModuleApiException StillHere() => new("MESSENGER_STILL_HERE", 409,
         "This conversation is still here; there is nothing to restore.");
+
+    public static ModuleApiException AlreadyContinued() => new("MESSENGER_ALREADY_CONTINUED", 409,
+        "This history was continued here already; it sits above that conversation.");
+
+    public static ModuleApiException MembersMissing(IReadOnlyList<string> names) => new("MESSENGER_MEMBERS_MISSING", 409,
+        $"Not here yet, with an enrolled key: {string.Join(", ", names)}. It stays history until they are.");
 }

@@ -21,7 +21,11 @@ public sealed class Restores(
     /// <summary>One conversation of a backup: who was in it, and the restorer's own key per epoch.</summary>
     public sealed record Request(
         Guid OriginConversationId, string OriginInstance, string Name, IReadOnlyList<Origin> Members, Guid MyOriginUserId,
-        IReadOnlyDictionary<int, byte[]> MyKeys);
+        IReadOnlyDictionary<int, byte[]> MyKeys)
+    {
+        /// <summary>A one-to-one chat where it was sealed (backups carry it; older restores said nothing, read as a group).</summary>
+        public bool IsDirect { get; init; }
+    }
 
     /// <summary>One message as it was stored, with its original id and sender id: what its ciphertext is bound to.</summary>
     public sealed record ImportedMessage(
@@ -73,6 +77,7 @@ public sealed class Restores(
                     OriginInstance = request.OriginInstance.Length <= 500 ? request.OriginInstance : request.OriginInstance[..500],
                     RestoredAt = DateTimeOffset.UtcNow,
                     IsReadOnly = true,
+                    IsDirect = request.IsDirect,
                 });
             }
 
@@ -153,8 +158,8 @@ public sealed class Restores(
                 ConversationId = conversationId,
                 OriginUserId = member.UserId,
                 TenantId = caller.TenantId,
-                Email = Clip(member.Email, 320),
-                DisplayName = Clip(member.DisplayName, 200),
+                Email = FolderNames.Clip(member.Email, 320),
+                DisplayName = FolderNames.Clip(member.DisplayName, 200),
             });
         }
 
@@ -174,22 +179,12 @@ public sealed class Restores(
         }
     }
 
-    // "Crew (restored)", or "Crew (restored 2)" beside one restored before: folder names are unique among siblings.
-    private async Task<string> FreeNameAsync(Guid repository, string name, CancellationToken cancellationToken)
+    // "Crew (restored)", or "Crew (restored 2)" beside one restored before.
+    private Task<string> FreeNameAsync(Guid repository, string name, CancellationToken cancellationToken)
     {
-        var taken = (await archive.GetChildrenAsync(repository, MessengerMasks.MessageGroup, cancellationToken))
-            .Select(d => d.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var stem = $"{Clip(string.IsNullOrWhiteSpace(name) ? "Conversation" : name.Trim(), 180)} (restored";
-        var candidate = $"{stem})";
-        for (var n = 2; taken.Contains(candidate); n++)
-        {
-            candidate = $"{stem} {n})";
-        }
-
-        return candidate;
+        var stem = FolderNames.Clip(string.IsNullOrWhiteSpace(name) ? "Conversation" : name.Trim(), 180);
+        return FolderNames.FreeAsync(archive, repository, n => n == 1 ? $"{stem} (restored)" : $"{stem} (restored {n})", cancellationToken);
     }
-
-    private static string Clip(string value, int max) => value.Length <= max ? value : value[..max];
 
     private async Task<Guid> RepositoryAsync(CancellationToken cancellationToken) =>
         Guid.TryParse(await archive.GetSettingAsync(MessengerModule.RepositorySetting, cancellationToken), out var id)

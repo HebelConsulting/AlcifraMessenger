@@ -55,6 +55,7 @@ public sealed class MessengerReadModelContext(DbContextOptions options) : Module
         restored.HasKey(r => r.ConversationId);
         restored.HasIndex(r => new { r.TenantId, r.OriginConversationId }).IsUnique();
         restored.Property(r => r.OriginInstance).HasMaxLength(500).IsRequired();
+        restored.HasIndex(r => r.ContinuedInConversationId);
 
         var origin = modelBuilder.Entity<OriginMember>().ToTable("msg_origin_members");
         origin.HasKey(o => new { o.ConversationId, o.OriginUserId });

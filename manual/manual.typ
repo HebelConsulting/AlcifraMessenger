@@ -180,6 +180,12 @@ saconsole messenger restore --file conversations.simplarchive-messages
   same conversation joins it rather than making another.
 - *Checked first.* Every entry is checked against the backup's own list of hashes before anything is restored; a
   changed or damaged backup is refused as a whole.
+- *Continue here.* When everyone from a restored conversation is on this installation with an enrolled key (matched
+  by e-mail), its thread offers *Continue here*. A one-to-one chat continues as the chat with that person — the one
+  already started here, if there is one — and a group as a new group of the same people, administered by whoever
+  continued it, with a new key for everyone. The restored history then sits above the live conversation; members who
+  did not restore it see the conversation from there on, never history their own keys did not bring. Where somebody
+  is missing, the thread names them and the conversation stays history.
 - *Bound to your keys at the time.* A key enrolled only later cannot open older content; a renewed certificate on the
   same key can. A second enrolled key — a spare card — is your insurance.
 
@@ -215,8 +221,7 @@ For those who audit it:
 // ─────────────────────────────────────────────────────────────────────────────
 = Not yet
 
-- *Continuing a restored conversation* with the members who are on the new installation too, *restoring conversations
-  you have left*, and backing up from the phone on a schedule are in preparation.
+- *Restoring conversations you have left* is in preparation.
 - *Disappearing messages* are not offered.
 
 #index-page()
