@@ -11,7 +11,8 @@ namespace SimplArchive.Messenger.Api;
 [ApiController]
 [Authorize]
 [Route(Base)]
-public sealed class ConversationsController(Conversations conversations, Messages messages, Restores restores, IModuleArchiveFacade archive) : ControllerBase
+public sealed class ConversationsController(
+    Conversations conversations, Messages messages, Restores restores, Continuations continuations, IModuleArchiveFacade archive) : ControllerBase
 {
     public const string Base = "api/modules/messenger/conversations";
 
@@ -19,7 +20,7 @@ public sealed class ConversationsController(Conversations conversations, Message
     public async Task<ActionResult<ConversationListResource>> List(CancellationToken cancellationToken) =>
         new ConversationListResource
         {
-            Items = [.. (await conversations.MineAsync(cancellationToken)).Select(Resource)],
+            Items = await ResourcesAsync(await conversations.MineAsync(cancellationToken), cancellationToken),
             Links =
             [
                 new Link("self", $"/{Base}", "GET"),
@@ -39,7 +40,7 @@ public sealed class ConversationsController(Conversations conversations, Message
 
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<ConversationResource>> Get(Guid id, CancellationToken cancellationToken) =>
-        Resource(await conversations.MemberViewAsync(id, cancellationToken));
+        await ResourceAsync(await conversations.MemberViewAsync(id, cancellationToken), cancellationToken);
 
     [HttpHead("{id:guid}")]
     public async Task<IActionResult> Head(Guid id, CancellationToken cancellationToken)
@@ -57,7 +58,7 @@ public sealed class ConversationsController(Conversations conversations, Message
             .FirstOrDefault(u => u.Id == request.CounterpartUserId)
             ?? throw MessengerErrors.NoKey("This person");
         var id = await conversations.OpenDirectAsync(counterpart, Keys(request.Keys), cancellationToken);
-        return Resource(await conversations.MemberViewAsync(id, cancellationToken));
+        return await ResourceAsync(await conversations.MemberViewAsync(id, cancellationToken), cancellationToken);
     }
 
     [HttpPost]
@@ -65,7 +66,7 @@ public sealed class ConversationsController(Conversations conversations, Message
     {
         var id = await conversations.CreateGroupAsync(request.Name, Keys(request.Keys), cancellationToken);
         var view = await conversations.MemberViewAsync(id, cancellationToken);
-        return Created($"/{Base}/{id}", Resource(view));
+        return Created($"/{Base}/{id}", await ResourceAsync(view, cancellationToken));
     }
 
     [HttpPost("{id:guid}/members")]
@@ -113,8 +114,8 @@ public sealed class ConversationsController(Conversations conversations, Message
         var id = await restores.BeginAsync(new Restores.Request(
             request.OriginConversationId, request.OriginInstance, request.Name,
             [.. request.Members.Select(m => new Restores.Origin(m.UserId, m.Email, m.DisplayName))],
-            request.MyUserId, request.Keys.ToDictionary(k => k.Epoch, k => k.Key)), cancellationToken);
-        return Resource(await conversations.MemberViewAsync(id, cancellationToken));
+            request.MyUserId, request.Keys.ToDictionary(k => k.Epoch, k => k.Key)) { IsDirect = request.IsDirect }, cancellationToken);
+        return await ResourceAsync(await conversations.MemberViewAsync(id, cancellationToken), cancellationToken);
     }
 
     /// <summary>A batch of a restored conversation's messages, ids kept; those already here are skipped.</summary>
@@ -126,6 +127,67 @@ public sealed class ConversationsController(Conversations conversations, Message
         return new ImportResultResource { Imported = imported, Skipped = skipped };
     }
 
+    /// <summary>Who a restored conversation's members are here: whether it can continue, and with whom.</summary>
+    [HttpGet("{id:guid}/continuation")]
+    public async Task<ActionResult<ContinuationResource>> Continuation(Guid id, CancellationToken cancellationToken)
+    {
+        var preview = await continuations.PreviewAsync(id, cancellationToken);
+        return new ContinuationResource
+        {
+            IsDirect = preview.Restored.IsDirect,
+            Name = preview.Name,
+            ExistingConversationId = preview.ExistingChat,
+            Missing = [.. preview.Missing],
+            Members =
+            [
+                .. preview.Members.Select(m => new ContinuationMemberResource
+                {
+                    OriginUserId = m.Origin.OriginUserId,
+                    Email = m.Origin.Email,
+                    DisplayName = m.Origin.DisplayName,
+                    UserId = m.Here?.Id,
+                    // The key of the live conversation is sealed to these: the person's certificates HERE.
+                    Links = m.Here is { } here ? [new Link("certificates", $"/{PeopleController.Base}/{here.Id}/certificates", "GET")] : [],
+                }),
+            ],
+            CanContinue = preview.Missing.Count == 0,
+            // GET reads this; POST to the same address continues it (ADR 0719: one rel, the method says which).
+            Links = [new Link("self", $"/{Base}/{id}/continuation", "GET")],
+        };
+    }
+
+    // Standing convention: every GET has its own HEAD.
+    [HttpHead("{id:guid}/continuation")]
+    public async Task<IActionResult> HeadContinuation(Guid id, CancellationToken cancellationToken)
+    {
+        await continuations.PreviewAsync(id, cancellationToken);
+        return NoContent();
+    }
+
+    /// <summary>Continues restored history as a live conversation, in one request: the chat with that person, or a new group.</summary>
+    [HttpPost("{id:guid}/continuation")]
+    public async Task<ActionResult<ConversationResource>> Continue(Guid id, [FromBody] ContinueRequest request, CancellationToken cancellationToken)
+    {
+        var live = await continuations.ContinueAsync(id, Keys(request.Keys), cancellationToken);
+        return await ResourceAsync(await conversations.MemberViewAsync(live, cancellationToken), cancellationToken);
+    }
+
+    /// <summary>The restored history shown above a live conversation, as far as the caller holds its keys.</summary>
+    [HttpGet("{id:guid}/earlier")]
+    public async Task<ActionResult<ConversationListResource>> Earlier(Guid id, CancellationToken cancellationToken) =>
+        new ConversationListResource
+        {
+            Items = await ResourcesAsync(await continuations.EarlierAsync(id, cancellationToken), cancellationToken),
+            Links = [new Link("self", $"/{Base}/{id}/earlier", "GET")],
+        };
+
+    [HttpHead("{id:guid}/earlier")]
+    public async Task<IActionResult> HeadEarlier(Guid id, CancellationToken cancellationToken)
+    {
+        await continuations.EarlierAsync(id, cancellationToken);
+        return NoContent();
+    }
+
     [HttpPut("{id:guid}/receipt")]
     public async Task<IActionResult> MarkRead(Guid id, [FromBody] ReceiptRequest request, CancellationToken cancellationToken)
     {
@@ -135,7 +197,21 @@ public sealed class ConversationsController(Conversations conversations, Message
 
     private static List<WrappedKey> Keys(IEnumerable<KeyRequest> keys) => [.. keys.Select(k => new WrappedKey(k.UserId, k.Key))];
 
-    private static ConversationResource Resource(Conversations.View view)
+    private async Task<List<ConversationResource>> ResourcesAsync(IEnumerable<Conversations.View> views, CancellationToken cancellationToken)
+    {
+        var resources = new List<ConversationResource>();
+        foreach (var view in views)
+        {
+            resources.Add(await ResourceAsync(view, cancellationToken));
+        }
+
+        return resources;
+    }
+
+    private async Task<ConversationResource> ResourceAsync(Conversations.View view, CancellationToken cancellationToken) =>
+        Resource(view, view.Restored is null && await continuations.HasEarlierAsync(view.Id, cancellationToken));
+
+    private static ConversationResource Resource(Conversations.View view, bool hasEarlier)
     {
         var self = $"/{Base}/{view.Id}";
         return new ConversationResource
@@ -186,6 +262,9 @@ public sealed class ConversationsController(Conversations conversations, Message
                 // A restore files a backup's files here too, before importing the messages that carry them.
                 new Link("upload-file", $"{self}/files", "POST"),
                 .. view.Restored is not null ? [new Link("import", $"{self}/imports", "POST")] : Array.Empty<Link>(),
+                // GET says who is here; POST continues. One rel, the method says which (ADR 0719).
+                .. view.Restored is { IsReadOnly: true, ContinuedInConversationId: null } ? [new Link("continuation", $"{self}/continuation", "GET")] : Array.Empty<Link>(),
+                .. hasEarlier ? [new Link("earlier", $"{self}/earlier", "GET")] : Array.Empty<Link>(),
                 .. !view.IsDirect && view.IAmAdmin ? [new Link("add-member", $"{self}/members", "POST")] : Array.Empty<Link>(),
                 .. view.NeedsNewEpoch ? [new Link("publish-epoch", $"{self}/epochs", "POST")] : Array.Empty<Link>(),
             ],

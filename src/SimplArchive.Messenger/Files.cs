@@ -33,7 +33,7 @@ public sealed class Files(IModuleArchiveFacade archive, Conversations conversati
         {
             documentId = await archive.FileUploadAsync(uploadId, conversationId, MessengerMasks.MessageObject, $"{Guid.NewGuid():N}", ".p7m",
                 new Dictionary<string, string> { [MessengerMasks.SenderField] = sender }, cancellationToken: cancellationToken);
-            if (view.IsDirect)
+            if (view.IsDirect && view.Restored is null)   // a restored chat's members are its old ids: no chat folders to reference
             {
                 foreach (var member in view.Members)
                 {

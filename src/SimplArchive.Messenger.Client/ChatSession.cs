@@ -183,6 +183,35 @@ public sealed class ChatSession(MessengerApi api, IConversationKeyOpener opener,
             [await WrapAsync(key, me, myself, cancellationToken), await WrapAsync(key, person.Id, person, cancellationToken)], cancellationToken);
     }
 
+    /// <summary>
+    /// Continues restored history here (core #1813): the chat with that person — joining one already started here — or a
+    /// new group of the same people, with a new key sealed now to every member's certificates here. The history then sits
+    /// above the live conversation, which is returned.
+    /// </summary>
+    /// <exception cref="ContinuationBlockedException">Somebody from it is not here with an enrolled key.</exception>
+    public async Task<Conversation> ContinueAsync(Conversation restored, CancellationToken cancellationToken = default)
+    {
+        var continuation = await api.ContinuationAsync(restored, cancellationToken);
+        if (!continuation.CanContinue)
+        {
+            throw new ContinuationBlockedException(continuation.Missing);
+        }
+
+        if (continuation.ExistingConversationId is not null)
+        {
+            return await api.ContinueAsync(continuation, [], cancellationToken);
+        }
+
+        var key = ConversationKeys.NewKey();
+        var keys = new List<WrappedKey>();
+        foreach (var member in continuation.Members)
+        {
+            keys.Add(await WrapAsync(key, member.UserId!.Value, member, cancellationToken));
+        }
+
+        return await api.ContinueAsync(continuation, keys, cancellationToken);
+    }
+
     /// <summary>A named group of the caller and <paramref name="people"/>, with a new key for everyone.</summary>
     public async Task<Conversation> CreateGroupAsync(ConversationList list, string name, IReadOnlyList<Person> people, CancellationToken cancellationToken = default)
     {

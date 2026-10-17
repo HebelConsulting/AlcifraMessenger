@@ -33,8 +33,8 @@ arrives slice by slice.
 - **On the phone:** the screens run in SimplArchive Mobile's Messages tile — groups with administrators, photos and
   files, read receipts, and a "new messages" push that opens its conversation.
 - **Backup and restore:** a user's conversations in one sealed file (`MessengerBackup`), restored on another
-  installation as read-only history; continuing them there, the phone's scheduled backup and **SAM**, the standalone
-  messages-only app, come next.
+  installation as history, which continues as a live conversation once everyone from it is there; the phone backs up
+  to a folder daily or weekly. **SAM**, the standalone messages-only app, comes next.
 
 ## Building
 

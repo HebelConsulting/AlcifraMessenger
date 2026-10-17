@@ -58,6 +58,10 @@ bound to travel with them. Restoring twice adds nothing; a second member restori
 Restored messages are marked: the format has no sender signatures (below), so they are as trustworthy as whoever
 restored them.
 
+A restored conversation **continues** in a live one, never inside its own epochs: those are bound to the ids they were
+sealed under. Continuing makes a new key for the members' certificates here (or joins the one-to-one chat already
+started) and places the restored conversation before it as earlier history; each part opens with its own ids.
+
 ## Not in version 1
 
 Forward secrecy within an epoch (a ratchet) and signatures by the sender: a member holding the epoch key could forge a

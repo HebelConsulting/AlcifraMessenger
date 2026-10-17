@@ -232,3 +232,41 @@ public sealed record BackupMember(Guid UserId, string Email, string DisplayName)
 public sealed record BackupMessage(
     Guid Id, int Epoch, Guid SenderUserId, DateTimeOffset SentAt, DateTimeOffset? EditedAt, DateTimeOffset? DeletedAt,
     Guid? ReplyToId, Guid? AttachmentDocumentId, byte[] Ciphertext);
+
+/// <summary>Who a restored conversation's members are here, and whether it can continue as a live conversation.</summary>
+public sealed class Continuation : Resource
+{
+    /// <summary>A one-to-one chat: it continues as the chat with that person.</summary>
+    public bool IsDirect { get; set; }
+
+    /// <summary>The name a continued group gets: the original one.</summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>The chat with that person already started here, which continuing joins without a new key.</summary>
+    public Guid? ExistingConversationId { get; set; }
+
+    /// <summary>The old members, each with who they are here.</summary>
+    public List<ContinuationMember> Members { get; set; } = [];
+
+    /// <summary>Old members nobody here matches: while any are, it stays history.</summary>
+    public List<string> Missing { get; set; } = [];
+
+    /// <summary>Every member is here.</summary>
+    public bool CanContinue { get; set; }
+}
+
+/// <summary>An old member, and who they are here, with the certificates the live conversation's key is sealed to.</summary>
+public sealed class ContinuationMember : Resource
+{
+    /// <summary>Their id where the history was sealed.</summary>
+    public Guid OriginUserId { get; set; }
+
+    /// <summary>The e-mail they are matched by.</summary>
+    public string Email { get; set; } = string.Empty;
+
+    /// <summary>Their name.</summary>
+    public string DisplayName { get; set; } = string.Empty;
+
+    /// <summary>Their user id here; null when nobody matches.</summary>
+    public Guid? UserId { get; set; }
+}

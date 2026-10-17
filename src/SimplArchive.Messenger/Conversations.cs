@@ -71,7 +71,9 @@ public sealed class Conversations(MessengerReadModelContext db, IModuleArchiveFa
             }
         }
 
-        return views;
+        // History continued in a live conversation the caller is in is shown above that thread, not as its own entry.
+        var mineIds = views.Select(v => v.Id).ToHashSet();
+        return [.. views.Where(v => v.Restored?.ContinuedInConversationId is not { } live || !mineIds.Contains(live))];
     }
 
     /// <summary>One conversation, or null when the caller is not a member at its current epoch.</summary>
@@ -163,13 +165,16 @@ public sealed class Conversations(MessengerReadModelContext db, IModuleArchiveFa
         var origin = await db.OriginMembers.AsNoTracking().Where(o => o.ConversationId == id).ToListAsync(cancellationToken);
         var myEmail = (await caller.GetIdentityAsync(cancellationToken))?.Email;
         var folder = await archive.GetDocumentAsync(id, cancellationToken);
-        return new View(id, false, folder?.Name ?? string.Empty, null, latest, myKeys[latest], [.. origin.Select(o => o.OriginUserId)], [], 0, false, me)
+        var mine = origin.FirstOrDefault(o => o.Email.Equals(myEmail, StringComparison.OrdinalIgnoreCase))?.OriginUserId;
+        // A one-to-one chat's title is the other person, as in any chat.
+        var counterpart = restored.IsDirect ? origin.FirstOrDefault(o => o.OriginUserId != mine)?.OriginUserId : null;
+        return new View(id, restored.IsDirect, folder?.Name ?? string.Empty, counterpart, latest, myKeys[latest], [.. origin.Select(o => o.OriginUserId)], [], 0, false, me)
         {
             Names = origin.ToDictionary(o => o.OriginUserId, o => o.DisplayName),
             Emails = origin.ToDictionary(o => o.OriginUserId, o => o.Email),
             MyKeys = myKeys,
             Restored = restored,
-            MyOriginUserId = origin.FirstOrDefault(o => o.Email.Equals(myEmail, StringComparison.OrdinalIgnoreCase))?.OriginUserId,
+            MyOriginUserId = mine,
         };
     }
 

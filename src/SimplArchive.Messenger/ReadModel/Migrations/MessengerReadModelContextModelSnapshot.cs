@@ -223,6 +223,12 @@ namespace SimplArchive.Messenger.ReadModel.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("ContinuedInConversationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsDirect")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("IsReadOnly")
                         .HasColumnType("boolean");
 
@@ -241,6 +247,8 @@ namespace SimplArchive.Messenger.ReadModel.Migrations
                         .HasColumnType("uuid");
 
                     b.HasKey("ConversationId");
+
+                    b.HasIndex("ContinuedInConversationId");
 
                     b.HasIndex("TenantId", "OriginConversationId")
                         .IsUnique();

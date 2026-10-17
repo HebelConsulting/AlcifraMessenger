@@ -70,13 +70,7 @@ internal sealed class ThreadPage : ContentPage
         page.Add(_list, 0, 0);
         page.Add(_replyBar, 0, 1);
         // Restored history (core #1813) is read, not continued: where the compose bar would be, it says so.
-        page.Add(conversation.IsReadOnly
-            ? new Label
-            {
-                Text = ViewText.Get("RestoredReadOnly", conversation.RestoredFrom ?? string.Empty),
-                FontSize = 13, TextColor = Colors.Gray, Padding = new Thickness(16, 10), HorizontalTextAlignment = TextAlignment.Center,
-            }
-            : composeBar, 0, 2);
+        page.Add(conversation.IsReadOnly ? HistoryBar(conversation) : composeBar, 0, 2);
         Content = page;
     }
 
@@ -84,6 +78,44 @@ internal sealed class ThreadPage : ContentPage
     {
         base.OnAppearing();
         await LoadAsync();
+    }
+
+    // Restored history says so; where every member is here it offers to continue (core #1813), in place of the compose bar.
+    private View HistoryBar(Conversation conversation)
+    {
+        var bar = new VerticalStackLayout { Padding = new Thickness(16, 10), Spacing = 8 };
+        bar.Add(new Label
+        {
+            Text = ViewText.Get("RestoredReadOnly", conversation.RestoredFrom ?? string.Empty),
+            FontSize = 13, TextColor = Colors.Gray, HorizontalTextAlignment = TextAlignment.Center,
+        });
+        if (conversation.Offers("continuation"))
+        {
+            var resume = new Button { Text = ViewText.Get("ContinueHere"), BackgroundColor = _screens.Accent, TextColor = Colors.White };
+            resume.Clicked += async (_, _) => await ContinueAsync();
+            bar.Add(resume);
+        }
+
+        return bar;
+    }
+
+    // The live conversation replaces this thread: the history now sits above it there.
+    private async Task ContinueAsync()
+    {
+        try
+        {
+            var live = await _screens.Session.ContinueAsync(_conversation);
+            Navigation.InsertPageBefore(_screens.Thread(live), this);
+            await Navigation.PopAsync();
+        }
+        catch (ContinuationBlockedException blocked)
+        {
+            await DisplayAlertAsync(ViewText.Get("ContinueHere"), ViewText.Get("ContinueMissing", string.Join(", ", blocked.Missing)), ViewText.Get("OK"));
+        }
+        catch (Exception exception)
+        {
+            await MessengerScreens.ShowAsync(this, exception);
+        }
     }
 
     private async Task LoadAsync()
@@ -100,7 +132,24 @@ internal sealed class ThreadPage : ContentPage
                 opened.Add(await session.OpenAsync(_conversation, message));   // the first one asks for the key, once
             }
 
-            var rows = ThreadRows.Build(_conversation, opened, session.Me);
+            // Restored history this conversation continues comes first, each opened under the ids it was sealed with.
+            var rows = new List<ThreadRow>();
+            if (_conversation.Offers("earlier"))
+            {
+                foreach (var earlier in (await session.Api.EarlierAsync(_conversation)).Items)
+                {
+                    var (_, old) = await session.MessagesAsync(earlier);
+                    var openedOld = new List<OpenedMessage>();
+                    foreach (var message in old)
+                    {
+                        openedOld.Add(await session.OpenAsync(earlier, message));
+                    }
+
+                    rows.AddRange(ThreadRows.Build(earlier, openedOld, session.Me));
+                }
+            }
+
+            rows.AddRange(ThreadRows.Build(_conversation, opened, session.Me));
             _list.ItemsSource = rows;
             if (messages.Count > 0)
             {

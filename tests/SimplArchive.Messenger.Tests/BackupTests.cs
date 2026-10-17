@@ -147,6 +147,89 @@ public sealed class BackupTests : IAsyncDisposable
         await Assert.ThrowsAsync<BackupDamagedException>(() => MessengerBackup.RestoreAsync(_new.Api, Rewound(changed)));
     }
 
+    [Fact]
+    public async Task A_restored_group_continues_as_a_live_group_with_its_history_above_it()
+    {
+        var (annas, _, _) = await TalkAndBackUpAsync();
+        var (anna, tom) = (Person(_new, "Anna"), Person(_new, "Tom"));
+        await _new.StartAsync();
+        _new.Caller.UserId = anna;
+        await _new.Api.DiscoverAsync();
+        await MessengerBackup.RestoreAsync(_new.Api, annas);
+        var restored = Assert.Single((await _new.Api.ConversationsAsync()).Items);
+
+        var session = Session(_new, anna, "Anna");
+        var live = await session.ContinueAsync(restored);
+
+        Assert.Equal("Crew", live.Name);
+        Assert.False(live.IsReadOnly || live.Restored);
+        Assert.True(live.CanManageMembers);                                          // the member who continued it
+        Assert.Equal(new[] { anna, tom }.Order(), live.Members.Select(m => m.UserId).Order());
+        Assert.Equal(live.Id, Assert.Single((await _new.Api.ConversationsAsync()).Items).Id);   // the history is no entry of its own
+        var earlier = Assert.Single((await _new.Api.EarlierAsync(live)).Items);
+        Assert.Equal(restored.Id, earlier.Id);
+        Assert.Null(earlier.LinkOf("continuation"));                                 // continued once
+
+        var (page, _) = await session.MessagesAsync(live);
+        await session.SendAsync(live, page, "Back again");
+        _new.Caller.UserId = tom;                                                    // Tom never restored: he reads what follows
+        var forTom = await _new.Api.RefreshAsync(live);
+        var (_, messages) = await Session(_new, tom, "Tom").MessagesAsync(forTom);
+        Assert.Equal("Back again", (await Session(_new, tom, "Tom").OpenAsync(forTom, Assert.Single(messages))).Text);
+        Assert.Empty((await _new.Api.EarlierAsync(forTom)).Items);                   // and no history he holds no key for
+    }
+
+    [Fact]
+    public async Task A_restored_chat_continues_as_the_chat_with_that_person_already_started_here()
+    {
+        var (anna, tom) = (Person(_old, "Anna"), Person(_old, "Tom"));
+        await _old.StartAsync();
+        _old.Caller.UserId = anna;
+        await _old.Api.DiscoverAsync();
+        var old = Session(_old, anna, "Anna");
+        var chat = await old.StartDirectAsync(await _old.Api.ConversationsAsync(), Assert.Single((await _old.Api.PeopleAsync("tom")).Items));
+        var (oldPage, _) = await old.MessagesAsync(chat);
+        await old.SendAsync(chat, oldPage, "Hi from before");
+        var backup = new MemoryStream();
+        await MessengerBackup.WriteAsync(_old.Api, backup, "https://old.example");
+
+        var (annaHere, _) = (Person(_new, "Anna"), Person(_new, "Tom"));
+        await _new.StartAsync();
+        _new.Caller.UserId = annaHere;
+        await _new.Api.DiscoverAsync();
+        var session = Session(_new, annaHere, "Anna");
+        var existing = await session.StartDirectAsync(await _new.Api.ConversationsAsync(), Assert.Single((await _new.Api.PeopleAsync("tom")).Items));
+        await MessengerBackup.RestoreAsync(_new.Api, Rewound(backup));
+        var restored = (await _new.Api.ConversationsAsync()).Items.Single(c => c.Restored);
+        Assert.True(restored.IsDirect);
+        Assert.Equal("Tom", restored.CounterpartName);
+        Assert.Equal(existing.Id, (await _new.Api.ContinuationAsync(restored)).ExistingConversationId);
+
+        var live = await session.ContinueAsync(restored);
+
+        Assert.Equal(existing.Id, live.Id);                                          // joined, not started again
+        var earlier = Assert.Single((await _new.Api.EarlierAsync(live)).Items);
+        var (_, history) = await session.MessagesAsync(earlier);
+        Assert.Equal("Hi from before", (await session.OpenAsync(earlier, Assert.Single(history))).Text);
+    }
+
+    [Fact]
+    public async Task Somebody_not_here_keeps_it_history_and_is_named()
+    {
+        var (annas, _, _) = await TalkAndBackUpAsync();
+        var anna = Person(_new, "Anna");                                             // Tom has no account here
+        await _new.StartAsync();
+        _new.Caller.UserId = anna;
+        await _new.Api.DiscoverAsync();
+        await MessengerBackup.RestoreAsync(_new.Api, annas);
+        var restored = Assert.Single((await _new.Api.ConversationsAsync()).Items);
+
+        var blocked = await Assert.ThrowsAsync<ContinuationBlockedException>(() => Session(_new, anna, "Anna").ContinueAsync(restored));
+
+        Assert.Equal(["Tom"], blocked.Missing);
+        Assert.True(Assert.Single((await _new.Api.ConversationsAsync()).Items).IsReadOnly);
+    }
+
     private static MemoryStream Rewound(MemoryStream stream)
     {
         stream.Position = 0;
