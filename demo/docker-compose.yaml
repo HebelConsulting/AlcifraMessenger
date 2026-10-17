@@ -1,6 +1,7 @@
 # A local SimplArchive with the Messenger module, for trying the module and walking the phone's Messages tile on an
 # emulator. NOT production: it is the core's development stack (a sibling checkout of the core) plus this module.
-# The core is expected at ../../SimplArchivePrivate; with a checkout of the public core (SimplArchive), link it there.
+# The core is the public SimplArchive repository, checked out beside this one (../../SimplArchive); set
+# SIMPLARCHIVE_CORE to use a checkout somewhere else.
 #
 # The module is placed through `modules-local`, the one placeholder every api instance waits for (core ADR 0808), so
 # every instance loads it; mounting it onto `api` would give one instance the module and the other none.
@@ -10,7 +11,7 @@
 name: messenger-demo
 
 include:
-  - path: ../../SimplArchivePrivate/docker-compose.yaml
+  - path: ${SIMPLARCHIVE_CORE:-../../SimplArchive}/docker-compose.yaml
 
 services:
   modules-local:
