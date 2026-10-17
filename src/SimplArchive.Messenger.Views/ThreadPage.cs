@@ -27,6 +27,8 @@ internal sealed class ThreadPage : ContentPage
         ToolbarItems.Add(new ToolbarItem { Text = ViewText.Get("Refresh"), Command = new Command(async () => await LoadAsync()) });
         if (!conversation.IsDirect)
         {
+            // A group's members, and what may be done with them (core #1810); leaving is there too, and here for speed.
+            ToolbarItems.Add(new ToolbarItem { Text = ViewText.Get("Members"), Command = new Command(async () => await Navigation.PushAsync(screens.Members(_conversation))) });
             ToolbarItems.Add(new ToolbarItem { Text = ViewText.Get("Leave"), Order = ToolbarItemOrder.Secondary, Command = new Command(async () => await LeaveAsync()) });
         }
 

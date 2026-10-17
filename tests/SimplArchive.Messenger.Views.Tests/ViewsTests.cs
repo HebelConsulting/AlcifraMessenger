@@ -76,6 +76,36 @@ public sealed class ViewsTests
         Assert.Null(Assert.Single(ThreadRows.Build(chat, [Opened(Tom, "Hi", MessageState.Readable)], Me)).SenderName);
     }
 
+    [Fact]
+    public void Members_list_administrators_first_and_offer_only_what_the_links_allow()
+    {
+        CultureInfo.CurrentUICulture = new CultureInfo("en");
+        var eve = Guid.NewGuid();
+        Member Row(Guid id, string name, bool admin, params string[] rels) => new()
+        {
+            UserId = id, DisplayName = name, IsAdmin = admin,
+            Links = [.. rels.Select(r => new Link(r, $"/x/{r}", "PUT"))],
+        };
+        var group = new Conversation
+        {
+            Name = "Team",
+            Members = [Row(eve, "Eve", false, "remove", "make-admin"), Row(Tom, "Tom", true, "remove", "revoke-admin"), Row(Me, "Anna", true, "remove", "revoke-admin")],
+        };
+
+        var rows = MemberRows.Build(group, Me);
+
+        Assert.Equal(["You", "Tom", "Eve"], rows.Select(r => r.Name));   // administrators first, the caller first among them
+        var me = rows[0];
+        Assert.True(me.CanLeave && !me.CanRemove);                   // one's own row leaves, never "removes"
+        Assert.True(rows[1].CanRevokeAdmin && rows[1].CanRemove && !rows[1].CanMakeAdmin);
+        Assert.True(rows[2].CanMakeAdmin && !rows[2].IsAdmin);
+
+        // A member who is not an administrator sees no links on others, so taps offer nothing.
+        var plain = MemberRows.Build(new Conversation { Members = [Row(Tom, "Tom", true), Row(Me, "Anna", false, "remove")] }, Me);
+        Assert.False(plain.Single(r => !r.IsMe).HasActions);
+        Assert.True(plain.Single(r => r.IsMe).CanLeave);
+    }
+
     private static OpenedMessage Opened(Guid sender, string? text, MessageState state, Guid? replyTo = null, bool edited = false, string[]? links = null) =>
         new(new Message
         {

@@ -2,6 +2,14 @@ using SimplArchive.Messenger.Client.Api;
 
 namespace SimplArchive.Messenger.Views;
 
+/// <summary>What the people picker is for.</summary>
+internal enum PeopleMode
+{
+    Chat,
+    Group,
+    AddMember,
+}
+
 /// <summary>
 /// Choosing who to talk to: one person for a chat, or a name and several people for a group. Only people with an enrolled
 /// key are offered, and the page says why.
@@ -9,18 +17,19 @@ namespace SimplArchive.Messenger.Views;
 internal sealed class PeoplePage : ContentPage
 {
     private readonly MessengerScreens _screens;
-    private readonly ConversationList _list;
-    private readonly bool _group;
+    private readonly ConversationList? _list;
+    private readonly PeopleMode _mode;
+    private readonly Conversation? _target;
     private readonly CollectionView _people;
     private readonly Entry? _name;
     private readonly HashSet<Guid> _chosen = [];
     private IReadOnlyList<Person> _found = [];
 
-    public PeoplePage(MessengerScreens screens, ConversationList list, bool group)
+    public PeoplePage(MessengerScreens screens, PeopleMode mode, ConversationList? list = null, Conversation? group = null)
     {
-        (_screens, _list, _group) = (screens, list, group);
-        Title = ViewText.Get(group ? "NewGroup" : "NewChat");
-        if (group)
+        (_screens, _mode, _list, _target) = (screens, mode, list, group);
+        Title = ViewText.Get(mode switch { PeopleMode.Group => "NewGroup", PeopleMode.AddMember => "AddMember", _ => "NewChat" });
+        if (mode == PeopleMode.Group)
         {
             ToolbarItems.Add(new ToolbarItem { Text = ViewText.Get("Create"), Command = new Command(async () => await CreateGroupAsync()) });
             _name = new Entry { Placeholder = ViewText.Get("GroupName") };
@@ -38,19 +47,20 @@ internal sealed class PeoplePage : ContentPage
 
         _people = new CollectionView
         {
-            SelectionMode = group ? SelectionMode.Multiple : SelectionMode.Single,
+            SelectionMode = mode == PeopleMode.Group ? SelectionMode.Multiple : SelectionMode.Single,
             ItemTemplate = new DataTemplate(Row),
         };
         _people.SelectionChanged += async (_, e) =>
         {
-            if (_group)
+            if (_mode == PeopleMode.Group)
             {
                 _chosen.Clear();
                 _chosen.UnionWith(e.CurrentSelection.OfType<Person>().Select(p => p.Id));
             }
             else if (e.CurrentSelection.FirstOrDefault() is Person person)
             {
-                await StartChatAsync(person);
+                _people.SelectedItem = null;
+                await (_mode == PeopleMode.AddMember ? AddMemberAsync(person) : StartChatAsync(person));
             }
         };
 
@@ -77,8 +87,29 @@ internal sealed class PeoplePage : ContentPage
     {
         try
         {
-            _found = [.. (await _screens.Session.Api.PeopleAsync(term)).Items.Where(p => p.Id != _screens.Session.Me)];
+            // Neither the caller nor, when adding, anyone already in the group.
+            var already = _target?.Members.Select(m => m.UserId).ToHashSet() ?? [];
+            _found = [.. (await _screens.Session.Api.PeopleAsync(term)).Items.Where(p => p.Id != _screens.Session.Me && !already.Contains(p.Id))];
             _people.ItemsSource = _found;
+        }
+        catch (Exception exception)
+        {
+            await MessengerScreens.ShowAsync(this, exception);
+        }
+    }
+
+    private async Task AddMemberAsync(Person person)
+    {
+        if (!await DisplayAlertAsync(ViewText.Get("AddMember"), ViewText.Get("AddConfirm", person.DisplayName), ViewText.Get("Yes"), ViewText.Get("No")))
+        {
+            return;
+        }
+
+        try
+        {
+            // A new key for everyone, the newcomer included: they read from now on, nothing from before.
+            await _screens.Session.AddAsync(_target!, person);
+            await Navigation.PopAsync();
         }
         catch (Exception exception)
         {
@@ -90,7 +121,7 @@ internal sealed class PeoplePage : ContentPage
     {
         try
         {
-            var chat = await _screens.Session.StartDirectAsync(_list, person);
+            var chat = await _screens.Session.StartDirectAsync(_list!, person);
             Navigation.InsertPageBefore(_screens.Thread(chat), this);
             await Navigation.PopAsync();
         }
@@ -110,7 +141,7 @@ internal sealed class PeoplePage : ContentPage
 
         try
         {
-            var group = await _screens.Session.CreateGroupAsync(_list, name, [.. _found.Where(p => _chosen.Contains(p.Id))]);
+            var group = await _screens.Session.CreateGroupAsync(_list!, name, [.. _found.Where(p => _chosen.Contains(p.Id))]);
             Navigation.InsertPageBefore(_screens.Thread(group), this);
             await Navigation.PopAsync();
         }
