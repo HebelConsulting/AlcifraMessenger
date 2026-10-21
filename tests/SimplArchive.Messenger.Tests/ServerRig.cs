@@ -96,7 +96,7 @@ internal sealed class ServerRig : IAsyncDisposable
         _app.MapGet("/api", () => new { links = module.RootLinks.Select(l => new { rel = l.Rel, href = l.Path, method = l.Method }) });
         await _app.StartAsync();
 
-        Api = new MessengerApi(_app.GetTestClient(), new HttpClient(new FakeStore(_store)));
+        Api = new MessengerApi(_app.GetTestClient(), new HttpClient(new FakeStore(_store, Archive)));
         return Api;
     }
 
@@ -119,19 +119,21 @@ internal sealed class ServerRig : IAsyncDisposable
                 new ClaimsPrincipal(new ClaimsIdentity([new Claim("sub", "test")], "Test")), "Test")));
     }
 
-    /// <summary>The object store: a presigned PUT keeps the bytes, a GET of the content address returns them.</summary>
-    private sealed class FakeStore(Dictionary<string, byte[]> store) : HttpMessageHandler
+    /// <summary>The object store: a presigned PUT keeps the bytes by upload, a GET of a document's content address returns
+    /// the bytes it was filed from.</summary>
+    private sealed class FakeStore(Dictionary<string, byte[]> store, FakeArchive archive) : HttpMessageHandler
     {
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             Assert.Null(request.Headers.Authorization);   // the archive's token never reaches the store
             if (request.Method == HttpMethod.Put)
             {
-                store["last"] = await request.Content!.ReadAsByteArrayAsync(cancellationToken);
+                store[request.RequestUri!.AbsolutePath.Trim('/')] = await request.Content!.ReadAsByteArrayAsync(cancellationToken);
                 return new HttpResponseMessage(HttpStatusCode.OK);
             }
 
-            return new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(store["last"]) };
+            var document = Guid.Parse(request.RequestUri!.Segments[^1]);
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(store[archive.FiledFrom[document]]) };
         }
     }
 }

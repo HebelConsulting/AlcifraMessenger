@@ -129,6 +129,11 @@ public static class ViewText
             "Inzwischen auf einem anderen Gerät geändert; angezeigt wird der aktuelle Stand.",
             "Modificato nel frattempo su un altro dispositivo; viene mostrato com'è ora.",
             "Cambiado mientras tanto en otro dispositivo; se muestra como está ahora."),
+        ["TooManyFiles"] = ("At most {0} files go in one message.", "Höchstens {0} Dateien passen in eine Nachricht.",
+            "Al massimo {0} file in un messaggio.", "Como máximo {0} archivos en un mensaje."),
+        ["RemoveFile"] = ("Remove {0}", "{0} entfernen", "Rimuovi {0}", "Quitar {0}"),
+        ["NewMessagesBelow"] = ("New messages ↓", "Neue Nachrichten ↓", "Nuovi messaggi ↓", "Mensajes nuevos ↓"),
+        ["OpenWhich"] = ("Which file?", "Welche Datei?", "Quale file?", "¿Qué archivo?"),
         ["NotAvailable"] = ("Messages are not available for you here.", "Nachrichten sind hier für Sie nicht verfügbar.",
             "I messaggi non sono disponibili per te qui.", "Los mensajes no están disponibles para usted aquí."),
     };

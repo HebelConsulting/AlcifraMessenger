@@ -127,7 +127,10 @@ public sealed class ConversationsController(
     public async Task<ActionResult<ImportResultResource>> Import(Guid id, [FromBody] ImportRequest request, CancellationToken cancellationToken)
     {
         var (imported, skipped) = await restores.ImportAsync(id, [.. request.Messages.Select(m => new Restores.ImportedMessage(
-            m.Id, m.Epoch, m.SenderUserId, m.SentAt, m.EditedAt, m.DeletedAt, m.ReplyToId, m.AttachmentDocumentId, m.Ciphertext))], cancellationToken);
+            m.Id, m.Epoch, m.SenderUserId, m.SentAt, m.EditedAt, m.DeletedAt, m.ReplyToId, m.AttachmentDocumentId, m.Ciphertext)
+        {
+            FurtherDocumentIds = m.FurtherDocumentIds ?? [],
+        })], cancellationToken);
         return new ImportResultResource { Imported = imported, Skipped = skipped };
     }
 

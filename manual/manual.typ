@@ -172,6 +172,9 @@ A photo or file is sealed on the device like a message and uploaded straight to 
 once, as a *Message Object*#idx("Message Object") in the conversation's folder, and each member finds it through their
 own chat folder.
 
+Files are added to the message being written: each appears as a chip above the text field, with its name and size, and
+✕ removes it. Several files go in one message, with whatever is typed as their caption; the text is optional.
+
 - *Only sealed content is accepted.* The archive checks that every Message Object is a sealed envelope and refuses
   anything else, and hands sealed files out on every encryption tier.
 - *Kept apart from the archive.* Message Objects live in a storage area of their own and are left out of search,

@@ -96,6 +96,14 @@ public sealed class MessageResource : HypermediaResource
     public DateTimeOffset? DeletedAt { get; set; }
     public Guid? ReplyToId { get; set; }
     public Guid? AttachmentDocumentId { get; set; }
+
+    /// <summary>
+    /// Every file the message carries, in order, each with its <c>content</c> link; the first is
+    /// <see cref="AttachmentDocumentId"/> (and the message's <c>attachment</c>), so a client that knows one file per message
+    /// still reads the first. Empty for a message without files.
+    /// </summary>
+    public List<MessageFileResource> Files { get; set; } = [];
+
     public byte[] Ciphertext { get; set; } = [];
 
     /// <summary>Brought in from a backup: as trustworthy as whoever restored it, so the thread marks it.</summary>
@@ -103,6 +111,12 @@ public sealed class MessageResource : HypermediaResource
 
     /// <summary>The tag an edit or a delete sends back as If-Match.</summary>
     public string ETag { get; set; } = string.Empty;
+}
+
+/// <summary>One file of a message, with the <c>content</c> link that redirects to its sealed bytes.</summary>
+public sealed class MessageFileResource : HypermediaResource
+{
+    public Guid DocumentId { get; set; }
 }
 
 public sealed class MessagePageResource : HypermediaResource
@@ -177,7 +191,16 @@ public sealed class SendRequest
     public int Epoch { get; set; }
     public byte[] Ciphertext { get; set; } = [];
     public Guid? ReplyToId { get; set; }
+
+    /// <summary>The one file of a client that sends one per message; ignored when <see cref="AttachmentDocumentIds"/> is given.</summary>
     public Guid? AttachmentDocumentId { get; set; }
+
+    /// <summary>The files the message carries, in order (at most ten), each filed in the conversation first.</summary>
+    public List<Guid>? AttachmentDocumentIds { get; set; }
+
+    /// <summary>The files as the server stores them: the list, else the single one, else none.</summary>
+    public IReadOnlyList<Guid> Files() =>
+        AttachmentDocumentIds is { Count: > 0 } several ? several : AttachmentDocumentId is { } one ? [one] : [];
 }
 
 public sealed class EditRequest
@@ -231,6 +254,10 @@ public sealed class ImportMessageRequest
     public DateTimeOffset? DeletedAt { get; set; }
     public Guid? ReplyToId { get; set; }
     public Guid? AttachmentDocumentId { get; set; }
+
+    /// <summary>The further files after the first, in order, each filed in the conversation first; absent from an older client.</summary>
+    public List<Guid>? FurtherDocumentIds { get; set; }
+
     public byte[] Ciphertext { get; set; } = [];
 }
 

@@ -19,6 +19,9 @@ internal sealed class FakeArchive : IModuleArchiveFacade
     public HashSet<(Guid Target, Guid Folder)> References { get; } = [];
     public HashSet<string> Uploads { get; } = [];
 
+    /// <summary>Which upload each filed document was made from: the object store keeps bytes by upload.</summary>
+    public Dictionary<Guid, string> FiledFrom { get; } = [];
+
     public Task<ModuleDocument?> GetDocumentAsync(Guid documentId, CancellationToken cancellationToken = default) =>
         Task.FromResult(Documents.GetValueOrDefault(documentId));
 
@@ -92,7 +95,9 @@ internal sealed class FakeArchive : IModuleArchiveFacade
             throw new ModuleUploadMissingException(uploadId);
         }
 
-        return CreateDocumentAsync(parentFolderId, maskId, name + extension, fields, cancellationToken);
+        var filed = CreateDocumentAsync(parentFolderId, maskId, name + extension, fields, cancellationToken);
+        FiledFrom[filed.Result] = uploadId;
+        return filed;
     }
 
     public Task CreateReferenceAsync(Guid targetDocumentId, Guid intoFolderId, CancellationToken cancellationToken = default)

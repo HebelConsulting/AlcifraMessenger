@@ -2,6 +2,7 @@ using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using SimplArchive.Messenger.Client.Api;
 
 namespace SimplArchive.Messenger.Client.Backup;
@@ -49,21 +50,28 @@ public static class MessengerBackup
                 var lines = new StringBuilder();
                 foreach (var message in await AllMessagesAsync(api, conversation, cancellationToken))
                 {
-                    string? blob = null;
+                    // Every file the message carries, as the envelope it was sent as: the first as `file`, as before, the
+                    // further ones (several files and a caption are one message) as `files`.
+                    var blobs = new List<string>();
                     if (message.AttachmentDocumentId is not null && message.DeletedAt is null)
                     {
-                        var bytes = await api.DownloadFileAsync(message, cancellationToken);
-                        blob = $"blobs/{Hash(bytes)}";
-                        if (!entries.ContainsKey(blob))
+                        for (var index = 0; index < Math.Max(1, message.Files.Count); index++)
                         {
-                            await AddAsync(zip, entries, blob, bytes, cancellationToken);
-                            fileCount++;
+                            var bytes = await api.DownloadFileAsync(message, index, cancellationToken);
+                            var blob = $"blobs/{Hash(bytes)}";
+                            if (!entries.ContainsKey(blob))
+                            {
+                                await AddAsync(zip, entries, blob, bytes, cancellationToken);
+                                fileCount++;
+                            }
+
+                            blobs.Add(blob);
                         }
                     }
 
                     lines.AppendLine(JsonSerializer.Serialize(new Line(
                         message.Id, message.Epoch, message.SenderUserId, message.SentAt, message.EditedAt, message.DeletedAt,
-                        message.ReplyToId, message.Ciphertext, blob), Json));
+                        message.ReplyToId, message.Ciphertext, blobs.FirstOrDefault()) { Files = blobs.Count > 1 ? blobs[1..] : null }, Json));
                     messageCount++;
                 }
 
@@ -140,14 +148,20 @@ public static class MessengerBackup
                 foreach (var line in batch)
                 {
                     Guid? file = null;
+                    var further = new List<Guid>();
                     if (line.File is { } blob)
                     {
                         file = (await api.UploadFileAsync(restored, await ReadAsync(zip, manifest, blob, cancellationToken), cancellationToken)).DocumentId;
                         report.Files++;
+                        foreach (var next in line.Files ?? [])
+                        {
+                            further.Add((await api.UploadFileAsync(restored, await ReadAsync(zip, manifest, next, cancellationToken), cancellationToken)).DocumentId);
+                            report.Files++;
+                        }
                     }
 
                     messages.Add(new BackupMessage(line.Id, line.Epoch, line.SenderUserId, line.SentAt, line.EditedAt, line.DeletedAt,
-                        line.ReplyToId, file, line.Ciphertext));
+                        line.ReplyToId, file, line.Ciphertext) { FurtherDocumentIds = further });
                 }
 
                 var result = await api.ImportAsync(restored, messages, cancellationToken);
@@ -219,7 +233,12 @@ public static class MessengerBackup
 
     private sealed record Line(
         Guid Id, int Epoch, Guid SenderUserId, DateTimeOffset SentAt, DateTimeOffset? EditedAt, DateTimeOffset? DeletedAt,
-        Guid? ReplyToId, byte[] Ciphertext, string? File);
+        Guid? ReplyToId, byte[] Ciphertext, string? File)
+    {
+        /// <summary>The further files' blobs after the first, in order; absent for none (and from an older backup).</summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public List<string>? Files { get; init; }
+    }
 }
 
 /// <summary>What a backup holds.</summary>

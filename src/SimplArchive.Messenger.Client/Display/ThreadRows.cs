@@ -9,8 +9,11 @@ public sealed record ThreadRow(
     Message Message, bool IsMine, string? SenderName, string Text, bool IsPlaceholder, string? Quote, string Footer,
     bool CanReply, bool CanEdit, bool CanDeleteForEveryone)
 {
-    /// <summary>The file the message carries, opened on a tap; null for text alone.</summary>
+    /// <summary>The file the message carries, opened on a tap; null for text alone. Its first, of several.</summary>
     public SentFile? File { get; init; }
+
+    /// <summary>Every file the message carries, in order, each opened on its own; empty for text alone.</summary>
+    public IReadOnlyList<SentFile> Files { get; init; } = [];
 
     /// <summary>The opened text, for an edit to start from; null when there is none to edit.</summary>
     public string? EditableText { get; init; }
@@ -85,6 +88,7 @@ public static class ThreadRows
             {
                 EditableText = mine && readable && o.File is null ? o.Text : null,
                 File = readable ? o.File : null,
+                Files = readable ? (o.Files.Count > 0 ? o.Files : o.File is { } one ? [one] : []) : [],
                 IsLocked = o.State == MessageState.Locked,
             };
         });
@@ -122,7 +126,8 @@ public static class ThreadRows
 
     private static string Excerpt(OpenedMessage message) => message.State switch
     {
-        MessageState.Readable when message.File is { } file && string.IsNullOrEmpty(message.Text) => $"📎 {file.Name}",
+        MessageState.Readable when message.File is { } file && string.IsNullOrEmpty(message.Text) =>
+            message.Files.Count > 1 ? $"📎 {file.Name} +{message.Files.Count - 1}" : $"📎 {file.Name}",
         MessageState.Readable when message.Text is { } text => text.Length <= 60 ? text : $"{text[..57]}…",
         MessageState.Deleted => ViewText.Get("Deleted"),
         MessageState.Locked => ViewText.Get("Locked"),

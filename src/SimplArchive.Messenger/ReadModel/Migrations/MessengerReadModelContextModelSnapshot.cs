@@ -171,6 +171,30 @@ namespace SimplArchive.Messenger.ReadModel.Migrations
                     b.ToTable("msg_messages", (string)null);
                 });
 
+            modelBuilder.Entity("SimplArchive.Messenger.ReadModel.MessageFile", b =>
+                {
+                    b.Property<Guid>("MessageId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("DocumentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("MessageId", "Position");
+
+                    b.HasIndex("DocumentId")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId");
+
+                    b.ToTable("msg_message_files", (string)null);
+                });
+
             modelBuilder.Entity("SimplArchive.Messenger.ReadModel.OriginMember", b =>
                 {
                     b.Property<Guid>("ConversationId")

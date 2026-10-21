@@ -171,3 +171,20 @@ public sealed class UserPreferences
 
     public Guid ConcurrencyToken { get; set; }
 }
+
+/// <summary>
+/// A further file a message carries (owner decision 2026-10-21: several files and a caption are ONE message): its first
+/// file stays <see cref="Message.AttachmentDocumentId"/>, so a client that knows only one file per message still shows
+/// that one and the caption; the second and later are rows here, at <see cref="Position"/> 1, 2, …
+/// </summary>
+/// <remarks>Not concurrency-tracked: created with its message and deleted with it, never edited — a child guarded by
+/// the tracked <see cref="Message"/> (a file message is not edited, and deleting it for everyone honours If-Match).</remarks>
+public sealed class MessageFile
+{
+    public Guid MessageId { get; set; }
+    public int Position { get; set; }
+    public Guid TenantId { get; set; }
+
+    /// <summary>The Message Object in the conversation's folder.</summary>
+    public Guid DocumentId { get; set; }
+}
