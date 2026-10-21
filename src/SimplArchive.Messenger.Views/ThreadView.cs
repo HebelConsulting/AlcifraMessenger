@@ -350,7 +350,7 @@ internal sealed class ThreadView : ScreenView
             {
                 FileShownIn.Photo => new PhotoPage(content, name),
                 FileShownIn.Preview => Screens.Preview.Open(content, name, opening.ContentType),
-                FileShownIn.Player => new PlayerPage(content, name),
+                FileShownIn.Player => new PlayerPage(content, name, opening.ContentType),
                 _ => new UnshownFilePage(opening, name),
             };
             FileMenu.Offer(page, Screens.Handoff, opening, content, name);

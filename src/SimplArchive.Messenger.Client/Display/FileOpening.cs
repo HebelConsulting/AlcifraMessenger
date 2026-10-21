@@ -40,13 +40,6 @@ public sealed record FileOpening(FileShownIn ShownIn, string ContentType, bool M
     // Plain text only: a format with markup of its own (HTML, say) would show as its source, which is not showing it.
     private static readonly HashSet<string> Texts = ["text/plain", "text/csv", "text/markdown"];
 
-    // What both platforms' players play; a WebM, an Ogg or an AVI plays on one platform only, so it is handed on.
-    private static readonly HashSet<string> Media =
-    [
-        "video/mp4", "video/x-m4v", "video/quicktime", "video/3gpp",
-        "audio/mpeg", "audio/mp4", "audio/x-m4a", "audio/aac", "audio/wav", "audio/x-wav", "audio/flac", "audio/3gpp",
-    ];
-
     // The file name's type, for a file sent with none worth the name (a picker often says octet-stream).
     private static readonly Dictionary<string, string> ByExtension = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -92,7 +85,7 @@ public sealed record FileOpening(FileShownIn ShownIn, string ContentType, bool M
     private static FileShownIn? Shown(string type) =>
         Photos.Contains(type) ? FileShownIn.Photo
         : type == "application/pdf" || Texts.Contains(type) ? FileShownIn.Preview
-        : Media.Contains(type) ? FileShownIn.Player
+        : MediaTypes.Plays(type) ? FileShownIn.Player
         : null;
 
     /// <summary>Whether the app shows it itself, as a photo, in the preview or in the player.</summary>
