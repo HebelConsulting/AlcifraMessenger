@@ -22,6 +22,7 @@ internal sealed class ScreenPage : ContentPage, IScreenHost
     public ScreenPage(MessengerScreens screens, Func<IScreenHost, ScreenView> build, ConversationsPage? list)
     {
         (_screens, Build, _list) = (screens, build, list);
+        screens.KeepClearOfKeyboard(this);   // the compose field above the keyboard
         _header = Header(null);
         View = build(this);
         View.Changed += Draw;
@@ -65,12 +66,14 @@ internal sealed class ScreenPage : ContentPage, IScreenHost
             _list?.Visited(conversation.Id);   // what the list marks for a moment when Back returns to it
         }
 
+        View.SetShowing(true);
         await View.AppearingAsync();
     }
 
     protected override void OnDisappearing()
     {
         base.OnDisappearing();
+        View.SetShowing(false);
         if (!Navigation.NavigationStack.Contains(this))
         {
             View.Close();

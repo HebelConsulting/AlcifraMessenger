@@ -23,6 +23,12 @@ public sealed record ThreadRow(
 
     /// <summary>Who has read this message, by name, for the "Read by" entry a tap offers; empty where there is no receipt.</summary>
     public IReadOnlyList<string> ReadBy { get; init; } = [];
+
+    /// <summary>Sealed and not opened, because the key prompt was cancelled: a tap asks for the key.</summary>
+    public bool IsLocked { get; init; }
+
+    /// <summary>A message on its way, shown until the server answers: it offers nothing to do with it yet.</summary>
+    public bool IsSending { get; init; }
 }
 
 /// <summary>
@@ -31,6 +37,18 @@ public sealed record ThreadRow(
 /// </summary>
 public static class ThreadRows
 {
+    /// <summary>
+    /// The caller's message while it is on its way (#26 follow-up): its text in the caller's own bubble, marked
+    /// "sending…", with nothing offered on a tap until the server has it — then the thread is read again and it is an
+    /// ordinary bubble.
+    /// </summary>
+    public static ThreadRow Sending(string text, Guid me) =>
+        new(new Message { SenderUserId = me, SentAt = DateTimeOffset.Now }, IsMine: true, SenderName: null, text, IsPlaceholder: false,
+            Quote: null, ViewText.Get("Sending"), CanReply: false, CanEdit: false, CanDeleteForEveryone: false)
+        {
+            IsSending = true,
+        };
+
     /// <summary>The bubbles of <paramref name="conversation"/>, oldest first.</summary>
     public static IReadOnlyList<ThreadRow> Build(Conversation conversation, IReadOnlyList<OpenedMessage> opened, Guid me)
     {
@@ -46,6 +64,7 @@ public static class ThreadRows
             {
                 MessageState.Readable => (o.Text ?? string.Empty, false),
                 MessageState.Deleted => (ViewText.Get("Deleted"), true),
+                MessageState.Locked => (ViewText.Get("Locked"), true),
                 _ => (ViewText.Get("CannotOpen"), true),
             };
             var quote = o.Message.ReplyToId is { } replied && byId.TryGetValue(replied, out var original)
@@ -66,6 +85,7 @@ public static class ThreadRows
             {
                 EditableText = mine && readable && o.File is null ? o.Text : null,
                 File = readable ? o.File : null,
+                IsLocked = o.State == MessageState.Locked,
             };
         });
         return [.. rows.Select(r => r.Message.Id == receiptOn?.Id ? WithReceipt(r, conversation, me, names) : r)];
@@ -105,6 +125,7 @@ public static class ThreadRows
         MessageState.Readable when message.File is { } file && string.IsNullOrEmpty(message.Text) => $"📎 {file.Name}",
         MessageState.Readable when message.Text is { } text => text.Length <= 60 ? text : $"{text[..57]}…",
         MessageState.Deleted => ViewText.Get("Deleted"),
+        MessageState.Locked => ViewText.Get("Locked"),
         _ => ViewText.Get("CannotOpen"),
     };
 }

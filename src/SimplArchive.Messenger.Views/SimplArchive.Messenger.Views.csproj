@@ -10,7 +10,7 @@
     <SingleProject>false</SingleProject>
     <SupportedOSPlatformVersion Condition="'$(TargetFramework)' == 'net10.0-android'">33.0</SupportedOSPlatformVersion>
     <PackageId>SimplArchive.Messenger.Views</PackageId>
-    <Version>0.10.0</Version>
+    <Version>0.11.0</Version>
     <Description>The SimplArchive Messenger's screens for a cross-platform app: conversations, the thread and the people picker, side by side on a tablet.</Description>
     <Authors>Hebel Consulting</Authors>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>

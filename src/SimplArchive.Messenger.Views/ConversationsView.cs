@@ -52,7 +52,11 @@ internal sealed class ConversationsView : ContentView
     public IReadOnlyList<ScreenAction> Actions { get; }
 
     /// <summary>Reads the conversations again; the shell is told what is listed now.</summary>
-    public async Task LoadAsync()
+    public Task LoadAsync() => LoadAsync(quiet: false);
+
+    /// <summary>The same read. <paramref name="quiet"/>: nobody asked for it (an arrival), so a failure is thrown to the
+    /// caller rather than put in front of anyone.</summary>
+    public async Task LoadAsync(bool quiet)
     {
         try
         {
@@ -61,7 +65,7 @@ internal sealed class ConversationsView : ContentView
             _empty.IsVisible = _conversations.Items.Count == 0;
             _shell.Listed(_conversations.Items);
         }
-        catch (Exception exception)
+        catch (Exception exception) when (!quiet)
         {
             await MessengerScreens.ShowAsync(_shell, exception);
         }

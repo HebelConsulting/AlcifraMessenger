@@ -61,6 +61,11 @@ internal sealed class ScreenPane : ContentView
         {
             var was = _active;
             _active = value;
+            if (_stack.Count > 0)
+            {
+                _stack[^1].View.SetShowing(value);
+            }
+
             if (value && !was && _stack.Count > 0)
             {
                 _ = _stack[^1].View.AppearingAsync();
@@ -130,6 +135,7 @@ internal sealed class ScreenPane : ContentView
         foreach (var entry in _stack)
         {
             entry.View.Changed -= DrawHeader;
+            entry.View.SetShowing(false);   // only the top is on show, and only while the pane is active
         }
 
         _body.Content = null;
@@ -146,6 +152,7 @@ internal sealed class ScreenPane : ContentView
         _body.Content = top;
         if (_active)
         {
+            top.SetShowing(true);
             _ = top.AppearingAsync();
         }
     }
