@@ -15,6 +15,7 @@ internal sealed class ThreadView : ScreenView
     private readonly Entry _compose;
     private readonly Button _send;
     private readonly Button _attach;
+    private readonly KeyPrompt _keyPrompt = new();  // a cancelled key prompt is not asked again until the caller asks
     private readonly SendGate _sending = new();   // one send at a time: a tap while one is on its way sends nothing
     private IReadOnlyList<ThreadRow> _rows = [];
     private readonly Label _replyingTo;
@@ -84,10 +85,11 @@ internal sealed class ThreadView : ScreenView
     /// <summary>The conversation shown: what the list marks while it is in the pane.</summary>
     public override Conversation Subject => _conversation;
 
-    public override Task AppearingAsync() => LoadAsync();
+    // Shown again — also when the key dialog closes over it: asks for the key only if the prompt was not cancelled.
+    public override Task AppearingAsync() => LoadAsync(ReadReason.Shown);
 
     // An arrival in this conversation (or one the host cannot place) reads it again, as its pull-down does (#26).
-    protected override (Guid Conversation, Func<Task> Read)? ReloadsOnArrival => (_conversation.Id, () => LoadAsync(quiet: true));
+    protected override (Guid Conversation, Func<Task> Read)? ReloadsOnArrival => (_conversation.Id, () => LoadAsync(ReadReason.Arrival, quiet: true));
 
     // Restored history says so; where every member is here it offers to continue (core #1813), in place of the compose bar.
     private View HistoryBar(Conversation conversation)
@@ -126,14 +128,42 @@ internal sealed class ThreadView : ScreenView
         }
     }
 
-    private Task LoadAsync() => LoadAsync(quiet: false);
+    // The caller's own read (Refresh, a pull, a tap on a sealed message, after sending): it may ask for the key again.
+    private Task LoadAsync() => LoadAsync(ReadReason.Asked);
 
     // quiet: nobody asked for this read (an arrival), so a failure goes to the caller rather than in front of anyone.
-    private async Task LoadAsync(bool quiet)
+    // A cancelled key prompt is a decision (KeyPrompt): the messages show sealed, no alert, and nothing asks again until
+    // the caller does.
+    private async Task LoadAsync(ReadReason reason, bool quiet = false)
     {
+        var cancelled = false;
+        var began = false;
+        var again = false;
         try
         {
             var session = Screens.Session;
+            var mode = _keyPrompt.Begin(reason);
+            if (mode == KeyAsk.Skip)
+            {
+                return;   // a read waiting for the key shows the thread when it is done
+            }
+
+            began = mode == KeyAsk.Ask;
+            var ask = began;
+            async Task<OpenedMessage> Open(Conversation conversation, Message message)
+            {
+                try
+                {
+                    return await session.OpenAsync(conversation, message, ask);   // the first one asks for the key, once
+                }
+                catch (OperationCanceledException) when (ask)
+                {
+                    cancelled = true;
+                    ask = false;
+                    return await session.OpenAsync(conversation, message, askForKey: false);
+                }
+            }
+
             var conversation = await session.Api.RefreshAsync(_conversation);
             if (IsClosed)
             {
@@ -146,7 +176,7 @@ internal sealed class ThreadView : ScreenView
             var opened = new List<OpenedMessage>();
             foreach (var message in messages)
             {
-                opened.Add(await session.OpenAsync(_conversation, message));   // the first one asks for the key, once
+                opened.Add(await Open(_conversation, message));
             }
 
             // Restored history this conversation continues comes first, each opened under the ids it was sealed with.
@@ -159,7 +189,7 @@ internal sealed class ThreadView : ScreenView
                     var openedOld = new List<OpenedMessage>();
                     foreach (var message in old)
                     {
-                        openedOld.Add(await session.OpenAsync(earlier, message));
+                        openedOld.Add(await Open(earlier, message));
                     }
 
                     rows.AddRange(ThreadRows.Build(earlier, openedOld, session.Me));
@@ -173,7 +203,7 @@ internal sealed class ThreadView : ScreenView
             }
 
             _list.ItemsSource = _rows = rows;
-            if (messages.Count > 0)
+            if (opened.Count > 0 && opened[^1].State != MessageState.Locked)   // a sealed message is not read
             {
                 await session.Api.MarkReadAsync(_conversation, messages[^1].SentAt);
                 await Host.ConversationsChangedAsync();   // its unread count is gone from a list beside it
@@ -182,6 +212,15 @@ internal sealed class ThreadView : ScreenView
         catch (Exception exception) when (!quiet)
         {
             await ShowAsync(exception);
+        }
+        finally
+        {
+            again = began && _keyPrompt.End(cancelled);
+        }
+
+        if (again && !IsClosed)
+        {
+            await LoadAsync(ReadReason.Shown, quiet: true);   // something wanted a read while this one waited for the key
         }
     }
 
@@ -206,6 +245,12 @@ internal sealed class ThreadView : ScreenView
                 _compose.Text = string.Empty;
                 Reply(null);
             });
+        }
+        catch (OperationCanceledException)
+        {
+            _list.ItemsSource = _rows;   // the key prompt was cancelled: a decision, not a failure, and not asked again
+            _keyPrompt.Decline();
+            return;
         }
         catch (Exception exception)
         {
@@ -274,7 +319,12 @@ internal sealed class ThreadView : ScreenView
                 return;   // a message went meanwhile: this one is not sent behind its back
             }
         }
-        catch (Exception exception) when (exception is not OperationCanceledException)
+        catch (OperationCanceledException)
+        {
+            _keyPrompt.Decline();   // the picker or the key prompt was cancelled: nothing asks again by itself
+            return;
+        }
+        catch (Exception exception)
         {
             await ShowAsync(exception);
         }
@@ -311,6 +361,12 @@ internal sealed class ThreadView : ScreenView
         if (row.IsSending)
         {
             return;   // on its way: nothing to do with it until the server has it
+        }
+
+        if (row.IsLocked)
+        {
+            await LoadAsync(ReadReason.Asked);   // sealed because the prompt was cancelled: the tap asks once
+            return;
         }
 
         var actions = new List<string>();

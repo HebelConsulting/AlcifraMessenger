@@ -24,6 +24,9 @@ public sealed record ThreadRow(
     /// <summary>Who has read this message, by name, for the "Read by" entry a tap offers; empty where there is no receipt.</summary>
     public IReadOnlyList<string> ReadBy { get; init; } = [];
 
+    /// <summary>Sealed and not opened, because the key prompt was cancelled: a tap asks for the key.</summary>
+    public bool IsLocked { get; init; }
+
     /// <summary>A message on its way, shown until the server answers: it offers nothing to do with it yet.</summary>
     public bool IsSending { get; init; }
 }
@@ -61,6 +64,7 @@ public static class ThreadRows
             {
                 MessageState.Readable => (o.Text ?? string.Empty, false),
                 MessageState.Deleted => (ViewText.Get("Deleted"), true),
+                MessageState.Locked => (ViewText.Get("Locked"), true),
                 _ => (ViewText.Get("CannotOpen"), true),
             };
             var quote = o.Message.ReplyToId is { } replied && byId.TryGetValue(replied, out var original)
@@ -81,6 +85,7 @@ public static class ThreadRows
             {
                 EditableText = mine && readable && o.File is null ? o.Text : null,
                 File = readable ? o.File : null,
+                IsLocked = o.State == MessageState.Locked,
             };
         });
         return [.. rows.Select(r => r.Message.Id == receiptOn?.Id ? WithReceipt(r, conversation, me, names) : r)];
@@ -120,6 +125,7 @@ public static class ThreadRows
         MessageState.Readable when message.File is { } file && string.IsNullOrEmpty(message.Text) => $"📎 {file.Name}",
         MessageState.Readable when message.Text is { } text => text.Length <= 60 ? text : $"{text[..57]}…",
         MessageState.Deleted => ViewText.Get("Deleted"),
+        MessageState.Locked => ViewText.Get("Locked"),
         _ => ViewText.Get("CannotOpen"),
     };
 }

@@ -9,6 +9,10 @@ bottom edge clear of the keyboard (applied to every page the screens build, so t
 Send waits for its answer: from the tap until the server answers, Send and the keyboard's Send key do nothing, the text
 stays in the field and the thread shows it as "sending…"; a failed send leaves the text there, never sent twice.
 
+A cancelled key prompt is a decision: the thread shows its messages as sealed ("tap to open it with your key") and asks
+again only when the user does — a tap on one, Refresh or a pull — never because it came back to the front (the dialog
+closing over it) or because something arrived.
+
 ```csharp
 var session = new ChatSession(api, keyOpener, myUserId, myEmail);
 var screens = new MessengerScreens(session, accent, handoff, keepClearOfKeyboard);

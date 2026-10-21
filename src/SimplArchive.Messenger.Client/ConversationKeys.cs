@@ -96,6 +96,16 @@ public sealed class KeyRing(IConversationKeyOpener opener)
         return key;
     }
 
+    /// <summary>Whether the key of <paramref name="conversationId"/> at <paramref name="epoch"/> is held: opening with it asks
+    /// for nothing.</summary>
+    public bool Holds(Guid conversationId, int epoch)
+    {
+        lock (_gate)
+        {
+            return _keys.ContainsKey((conversationId, epoch));
+        }
+    }
+
     /// <summary>Forgets every key, overwriting it first.</summary>
     public void Clear()
     {

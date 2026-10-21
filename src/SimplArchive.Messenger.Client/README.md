@@ -17,7 +17,8 @@ The client side of the SimplArchive Messenger, free of any user interface:
 - `Display` holds what every app must show alike, free of any user interface: `ThreadRows` (a thread's bubbles —
   sender, quote, the "restored" mark, the receipt line), `MemberRows`, `MessagesSplit` (when a wide window shows the
   conversations beside the open one, and which one the pane keeps after the list is read again), `Arrivals` and
-  `ReloadOnArrival` (which open screen a push reloads, and how pushes close together are read once), and `ViewText`, the
+  `ReloadOnArrival` (which open screen a push reloads, and how pushes close together are read once), `SendGate` (one send
+  at a time), `KeyPrompt` (a cancelled key prompt is not asked again until the user asks), and `ViewText`, the
   texts in English, German, Italian and Spanish. The phone's screens and the desktop's tab both draw from it.
 
 The format is specified in the repository's `docs/format.md`. Apache License 2.0.

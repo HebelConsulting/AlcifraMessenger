@@ -20,6 +20,10 @@ public enum MessageState
 
     /// <summary>It does not open: altered, or not sealed for this conversation, epoch, id and sender.</summary>
     Unopenable,
+
+    /// <summary>Not opened: its epoch's key is not held, and the key was not to be asked for (the caller cancelled
+    /// the prompt). Opens once the caller asks.</summary>
+    Locked,
 }
 
 /// <summary>A message and what reading it gave.</summary>
@@ -74,8 +78,15 @@ public sealed class ChatSession(MessengerApi api, IConversationKeyOpener opener,
         return (first, all);
     }
 
-    /// <summary>Opens <paramref name="message"/> with the key of its own epoch.</summary>
-    public async Task<OpenedMessage> OpenAsync(Conversation conversation, Message message, CancellationToken cancellationToken = default)
+    /// <summary>Opens <paramref name="message"/> with the key of its own epoch, asking for the key where it is not held.</summary>
+    public Task<OpenedMessage> OpenAsync(Conversation conversation, Message message, CancellationToken cancellationToken = default) =>
+        OpenAsync(conversation, message, askForKey: true, cancellationToken);
+
+    /// <summary>
+    /// Opens <paramref name="message"/> with the key of its own epoch. Without <paramref name="askForKey"/> a key that is
+    /// not held is not asked for: the message comes back <see cref="MessageState.Locked"/>.
+    /// </summary>
+    public async Task<OpenedMessage> OpenAsync(Conversation conversation, Message message, bool askForKey, CancellationToken cancellationToken = default)
     {
         if (message.DeletedAt is not null)
         {
@@ -85,6 +96,11 @@ public sealed class ChatSession(MessengerApi api, IConversationKeyOpener opener,
         if (conversation.MyKeys.FirstOrDefault(k => k.Epoch == message.Epoch) is not { } mine)
         {
             return new OpenedMessage(message, null, MessageState.BeforeYouJoined);
+        }
+
+        if (!askForKey && !Keys.Holds(conversation.Id, message.Epoch))
+        {
+            return new OpenedMessage(message, null, MessageState.Locked);
         }
 
         var key = await Keys.KeyAsync(conversation.Id, message.Epoch, mine.Key, cancellationToken);
