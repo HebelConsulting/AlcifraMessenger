@@ -18,10 +18,10 @@ Narrower, it is the phone's list, and the width is asked again on every size cha
 conversation between the pane and a page of its own. Whether to offer the split at all is the host's decision.
 `OpenAtAsync(conversationId, split)` opens a "new messages" push the same way.
 
-Every screen above the list draws the same header, on a phone and in a tablet's pane: ‹ Back, the title, its actions
-as words and ⋮ for the rest (leaving a group, and any secondary entry the host adds to the page's toolbar); on a phone
-it stands in for the navigation bar, and the host's own toolbar entries, such as a way home, are drawn in it. Back on
-a phone marks the conversation it came from in the list for a moment, and a chat or group created on a phone is in the
+Every screen above the list draws the same header, on a phone and in a tablet's pane: the title, its actions as words
+and ⋮ for the rest (leaving a group). In the pane it has a ‹ Back of its own; on a phone it is drawn into the page's
+navigation bar, whose colours, back arrow and the host's own toolbar entries (a way home) stay the host's. Back on a
+phone marks the conversation it came from in the list for a moment, and a chat or group created on a phone is in the
 list at once.
 
 Texts in English, German, Italian and Spanish, following the current UI culture. Android now; iOS follows.
