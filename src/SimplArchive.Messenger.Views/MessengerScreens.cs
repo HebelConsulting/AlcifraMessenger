@@ -18,14 +18,30 @@ public interface IFileHandoff
 }
 
 /// <summary>
-/// The Messenger's screens for a host app: what the host supplies — its <see cref="ChatSession"/> (signed-in connection,
-/// hardware-key opener), its accent colour, how a file is handed on and how a page keeps clear of the keyboard — is a
-/// constructor argument, so leaving one out does not compile.
+/// The host's document preview (#27), the viewer its own documents open in: a PDF's pages or a plain text, with find and
+/// pinch zoom, drawn from memory — nothing of the file is written to storage.
 /// </summary>
+public interface IFilePreview
+{
+    /// <summary>
+    /// A page showing <paramref name="content"/> (a PDF or a plain text, as <paramref name="contentType"/> says), which lets
+    /// go of what it drew once it is closed. The screens push it, and add Open with… and Share to its menu where files may
+    /// leave the app; its own toolbar entries (find) stay the host's.
+    /// </summary>
+    ContentPage Open(byte[] content, string fileName, string contentType);
+}
+
+/// <summary>
+/// The Messenger's screens for a host app: what the host supplies — its <see cref="ChatSession"/> (signed-in connection,
+/// hardware-key opener), its accent colour, how a file is handed on, its document preview and how a page keeps clear of
+/// the keyboard — is a constructor argument, so leaving one out does not compile.
+/// </summary>
+/// <param name="preview">Where a PDF or a plain text opens: the host's own preview, in the app (#27).</param>
 /// <param name="keepClearOfKeyboard">Applied to every page the screens build, so the compose field stays above the
 /// keyboard: the host's own way, as for its other pages (on Android 15+, drawn edge to edge, the system no longer
 /// resizes the window for it; on iOS a host may pad the page in front itself and pass a no-op).</param>
-public sealed class MessengerScreens(ChatSession session, Color accent, IFileHandoff handoff, Action<ContentPage> keepClearOfKeyboard)
+public sealed class MessengerScreens(
+    ChatSession session, Color accent, IFileHandoff handoff, IFilePreview preview, Action<ContentPage> keepClearOfKeyboard)
 {
     /// <summary>The caller's conversations: where the Messages tile opens, as on a phone.</summary>
     public Page Conversations() => Conversations(split: false);
@@ -90,6 +106,8 @@ public sealed class MessengerScreens(ChatSession session, Color accent, IFileHan
     internal Color Accent => accent;
 
     internal IFileHandoff Handoff => handoff;
+
+    internal IFilePreview Preview => preview;
 
     /// <summary>Keeps <paramref name="page"/>'s bottom edge clear of the keyboard, as the host does it.</summary>
     internal void KeepClearOfKeyboard(ContentPage page) => keepClearOfKeyboard(page);

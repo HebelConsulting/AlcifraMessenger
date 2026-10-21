@@ -68,6 +68,26 @@ public sealed class WireTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task Whether_files_stay_in_the_app_travels_on_every_conversation_and_only_an_explicit_yes_keeps_them()
+    {
+        var api = await _rig.StartAsync();
+        _rig.Caller.UserId = _anna;
+        await api.DiscoverAsync();
+        var group = await api.CreateGroupAsync(await api.ConversationsAsync(), "Team", [new ClientKey(_anna, [1]), new ClientKey(_tom, [2])]);
+
+        // Unset — every tenant until an administrator decides — lets a file be handed on (#27).
+        Assert.False(group.FilesStayInApp);
+        Assert.False(Assert.Single((await api.ConversationsAsync()).Items).FilesStayInApp);
+
+        _rig.Archive.Settings[MessengerModule.FilesStayInAppSetting] = "true";
+        Assert.True(Assert.Single((await api.ConversationsAsync()).Items).FilesStayInApp);
+        Assert.True((await api.RefreshAsync(group)).FilesStayInApp);
+
+        _rig.Archive.Settings[MessengerModule.FilesStayInAppSetting] = "false";
+        Assert.False((await api.RefreshAsync(group)).FilesStayInApp);
+    }
+
+    [Fact]
     public async Task Groups_files_and_refusals_travel_as_the_server_sends_them()
     {
         var api = await _rig.StartAsync();

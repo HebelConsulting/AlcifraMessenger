@@ -59,6 +59,13 @@ public sealed class Files(IModuleArchiveFacade archive, Conversations conversati
         return await archive.GetDocumentContentUrlAsync(documentId, TimeSpan.FromMinutes(5), cancellationToken);
     }
 
+    /// <summary>
+    /// Whether this tenant keeps opened files in the app (<see cref="MessengerModule.FilesStayInAppSetting"/>): only an
+    /// explicit "true" does; unset, the default, lets a file be handed on.
+    /// </summary>
+    public async Task<bool> StayInAppAsync(CancellationToken cancellationToken) =>
+        bool.TryParse(await archive.GetSettingAsync(MessengerModule.FilesStayInAppSetting, cancellationToken), out var stay) && stay;
+
     // A member files a file; so does a restore, into restored history. One who left reads, and files nothing.
     private async Task<Conversations.View> RequireMayFileAsync(Guid conversationId, CancellationToken cancellationToken)
     {

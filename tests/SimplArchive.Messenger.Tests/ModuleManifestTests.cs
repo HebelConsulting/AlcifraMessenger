@@ -48,9 +48,18 @@ public class ModuleManifestTests
     [Fact]
     public void The_repository_is_an_administrators_setting()
     {
-        var setting = Assert.Single(_module.Settings);
-        Assert.Equal(MessengerModule.RepositorySetting, setting.Key);
+        var setting = Assert.Single(_module.Settings, s => s.Key == MessengerModule.RepositorySetting);
         Assert.False(setting.IsSecret);
+    }
+
+    [Fact]
+    public void Keeping_files_in_the_app_is_a_yes_or_no_that_is_off_until_an_administrator_turns_it_on()
+    {
+        // #27: unset is every tenant until somebody decides, so unset must mean the default, handing on allowed; a
+        // checkbox's unticked state is that same default.
+        var setting = Assert.Single(_module.Settings, s => s.Key == MessengerModule.FilesStayInAppSetting);
+        Assert.Equal((ModuleSettingKind.Boolean, false), (setting.Kind, setting.IsSecret));
+        Assert.Equal(2, _module.Settings.Count);
     }
 
     [Fact]

@@ -335,20 +335,26 @@ internal sealed class ThreadView : ScreenView
     // The server takes 100 MB; sealing adds a little, so the phone stops short of it.
     private const long MaxFileBytes = 95L * 1024 * 1024;
 
-    // A tap opens it, with the key (one use per file): a photo in the app, anything else handed on as a sealed document is.
+    // Open opens it, with the key (one use per file), in the app wherever the app can show it (#27): a photo on its page, a
+    // PDF or a plain text in the host's preview, a video or a sound in the player, from memory. What the app cannot show
+    // gets a page that says so. Handing on is only ever the page's menu, after a warning, and only where the tenant lets
+    // files leave the app.
     private async Task OpenFileAsync(ThreadRow row)
     {
         try
         {
             var content = await Screens.Session.OpenFileAsync(row.Message);
-            if (row.File!.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+            var name = row.File!.Name;
+            var opening = FileOpening.Of(content, name, row.File.ContentType, _conversation.FilesStayInApp);
+            var page = opening.ShownIn switch
             {
-                await Host.Page.Navigation.PushAsync(new PhotoPage(Screens.Handoff, content, row.File.Name, row.File.ContentType));
-            }
-            else
-            {
-                await Screens.Handoff.OpenWithAsync(content, row.File.Name, row.File.ContentType);
-            }
+                FileShownIn.Photo => new PhotoPage(content, name),
+                FileShownIn.Preview => Screens.Preview.Open(content, name, opening.ContentType),
+                FileShownIn.Player => new PlayerPage(content, name),
+                _ => new UnshownFilePage(opening, name),
+            };
+            FileMenu.Offer(page, Screens.Handoff, opening, content, name);
+            await Host.Page.Navigation.PushAsync(page);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {

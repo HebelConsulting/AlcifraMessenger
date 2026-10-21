@@ -3,8 +3,9 @@
 The SimplArchive Messenger's screens, code-only .NET MAUI: the conversation list, a conversation's thread (bubbles,
 replies, edit and delete), the people picker for a new chat or group, and a tablet's split of list and thread.
 Everything they do is `SimplArchive.Messenger.Client`'s `ChatSession`; the host supplies the session — its signed-in
-connection and its hardware-key opener — its accent colour, how an opened file is handed on, and how a page keeps its
-bottom edge clear of the keyboard (applied to every page the screens build, so the compose field stays above it).
+connection and its hardware-key opener — its accent colour, how an opened file is handed on, its document preview, and
+how a page keeps its bottom edge clear of the keyboard (applied to every page the screens build, so the compose field
+stays above it).
 
 Send waits for its answer: from the tap until the server answers, Send and the keyboard's Send key do nothing, the text
 stays in the field and the thread shows it as "sending…"; a failed send leaves the text there, never sent twice.
@@ -15,8 +16,30 @@ closing over it) or because something arrived.
 
 ```csharp
 var session = new ChatSession(api, keyOpener, myUserId, myEmail);
-var screens = new MessengerScreens(session, accent, handoff, keepClearOfKeyboard);
+var screens = new MessengerScreens(session, accent, handoff, preview, keepClearOfKeyboard);
 await Navigation.PushAsync(screens.Conversations(split: tabletLayout));
+```
+
+An opened file stays in the app wherever the app can show it, because a file handed to another app is a readable copy
+the Messenger no longer protects. `FileOpening` (in the client library) decides, from the bytes first, then the sent type,
+then the file name:
+
+| the file | where it opens |
+| --- | --- |
+| a photo (JPEG, PNG, GIF, WebP, BMP, HEIC) | the Messenger's photo page, from memory |
+| a PDF or plain text (text, CSV, Markdown) | the host's document preview (`IFilePreview`), from memory |
+| a video or a sound both platforms play (MP4, MOV, 3GP; MP3, M4A, AAC, WAV, FLAC) | the Messenger's player, from memory |
+| anything else (an office document, say) | a page saying the app cannot show it |
+
+Handing on is never what a tap does: *Open with…* and *Share* sit in the opened file's menu (⋮), and each first warns
+that the file leaves the app unsealed and is no longer protected by it. A tenant can keep files in the app altogether
+(the module's setting *Keep files in the app*, carried on every conversation as `FilesStayInApp`): the menu then offers
+neither, and a file the app cannot show says so and stays closed.
+
+The player is the toolkit's `MediaElement`, which plays from a stream; the host registers it once on its app builder:
+
+```csharp
+builder.UseMauiCommunityToolkitMediaElement(isAndroidForegroundServiceEnabled: false);
 ```
 
 With `split: true`, a window at least 700 points wide shows the conversations beside the open conversation, as a

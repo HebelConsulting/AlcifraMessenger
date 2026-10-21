@@ -32,7 +32,9 @@ arrives slice by slice.
 - **Free, no licence:** the module needs no licence file (core ABI 1.23), wherever it runs. `demo/up.sh` is the
   standalone start: one command to a SimplArchive with the Messenger active and test certificates enrolled.
 - **On the phone:** the screens run in SimplArchive Mobile's Messages tile — groups with administrators, photos and
-  files, read receipts, and a "new messages" push that opens its conversation and reloads the open screen.
+  files, read receipts, and a "new messages" push that opens its conversation and reloads the open screen. An opened
+  file stays in the app wherever the app can show it (photos, PDFs, plain text, video and sound, from memory); anything
+  else is handed on only from the menu and after a warning, and a tenant can keep files in the app altogether.
 - **Backup and restore:** a user's conversations in one sealed file (`MessengerBackup`), restored on another
   installation as history, which continues as a live conversation once everyone from it is there; the phone backs up
   to a folder daily or weekly. **SAM**, the standalone messages-only app, comes next.
