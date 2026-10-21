@@ -23,6 +23,9 @@ public sealed record ThreadRow(
 
     /// <summary>Who has read this message, by name, for the "Read by" entry a tap offers; empty where there is no receipt.</summary>
     public IReadOnlyList<string> ReadBy { get; init; } = [];
+
+    /// <summary>A message on its way, shown until the server answers: it offers nothing to do with it yet.</summary>
+    public bool IsSending { get; init; }
 }
 
 /// <summary>
@@ -31,6 +34,18 @@ public sealed record ThreadRow(
 /// </summary>
 public static class ThreadRows
 {
+    /// <summary>
+    /// The caller's message while it is on its way (#26 follow-up): its text in the caller's own bubble, marked
+    /// "sending…", with nothing offered on a tap until the server has it — then the thread is read again and it is an
+    /// ordinary bubble.
+    /// </summary>
+    public static ThreadRow Sending(string text, Guid me) =>
+        new(new Message { SenderUserId = me, SentAt = DateTimeOffset.Now }, IsMine: true, SenderName: null, text, IsPlaceholder: false,
+            Quote: null, ViewText.Get("Sending"), CanReply: false, CanEdit: false, CanDeleteForEveryone: false)
+        {
+            IsSending = true,
+        };
+
     /// <summary>The bubbles of <paramref name="conversation"/>, oldest first.</summary>
     public static IReadOnlyList<ThreadRow> Build(Conversation conversation, IReadOnlyList<OpenedMessage> opened, Guid me)
     {

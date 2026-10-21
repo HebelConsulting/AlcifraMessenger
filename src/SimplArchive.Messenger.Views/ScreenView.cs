@@ -44,6 +44,7 @@ internal abstract class ScreenView : ContentView
 {
     private string _title = string.Empty;
     private IReadOnlyList<ScreenAction> _actions = [];
+    private IDisposable? _arrivals;
 
     protected ScreenView(MessengerScreens screens, IScreenHost host) => (Screens, Host) = (screens, host);
 
@@ -86,7 +87,32 @@ internal abstract class ScreenView : ContentView
     public virtual Task AppearingAsync() => Task.CompletedTask;
 
     /// <summary>The host let go of the screen, for good.</summary>
-    public void Close() => IsClosed = true;
+    public void Close()
+    {
+        IsClosed = true;
+        SetShowing(false);
+    }
+
+    /// <summary>
+    /// Whether the screen is on show — its page in front, or the top of the split's active pane — as its host knows: while
+    /// it is, an arrival the screen is concerned by reads it again (<see cref="MessengerScreens.Arrived"/>, #26).
+    /// </summary>
+    public void SetShowing(bool showing)
+    {
+        if (!showing || IsClosed)
+        {
+            _arrivals?.Dispose();
+            _arrivals = null;
+        }
+        else if (_arrivals is null && ReloadsOnArrival is { } reloads)
+        {
+            _arrivals = Screens.Open.Show(Host.Page, reloads.Conversation, reloads.Read);
+        }
+    }
+
+    /// <summary>What an arrival reads again while the screen is on show: a thread's conversation and its pull-down's read.
+    /// Null for a screen no arrival changes (a group's members, the people picker).</summary>
+    protected virtual (Guid Conversation, Func<Task> Read)? ReloadsOnArrival => null;
 
     /// <summary>Shows a refusal or a failure over the screen's page — not once the screen was let go of.</summary>
     protected Task ShowAsync(Exception exception) => IsClosed ? Task.CompletedTask : MessengerScreens.ShowAsync(Host.Page, exception);

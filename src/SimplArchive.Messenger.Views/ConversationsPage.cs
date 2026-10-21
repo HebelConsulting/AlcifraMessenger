@@ -31,6 +31,7 @@ internal sealed class ConversationsPage : ContentPage
     private bool _moving;
     private Guid? _visited;   // the conversation a page above showed last: marked for a moment when Back returns
     private int _flash;
+    private IDisposable? _arrivals;   // while in front: an arrival reads the list again (#26)
 
     /// <param name="screens">The Messenger's screens.</param>
     /// <param name="split">Whether the host offers the split here; without it the page is the phone's list at any width.</param>
@@ -39,6 +40,7 @@ internal sealed class ConversationsPage : ContentPage
     public ConversationsPage(MessengerScreens screens, bool split, Conversation? selected = null)
     {
         (_screens, _split) = (screens, split);
+        screens.KeepClearOfKeyboard(this);   // the pane's compose field above the keyboard
         Title = ViewText.Get("Messages");
         _list = new ConversationsView(screens, this);
         foreach (var action in _list.Actions)
@@ -67,6 +69,7 @@ internal sealed class ConversationsPage : ContentPage
     {
         base.OnAppearing();
         _inFront = true;
+        _arrivals ??= _screens.Open.Show(this, conversation: null, () => _list.LoadAsync(quiet: true));
         Arrange();   // a narrowing while covered is done now
         await _list.LoadAsync();
     }
@@ -75,6 +78,8 @@ internal sealed class ConversationsPage : ContentPage
     {
         base.OnDisappearing();
         _inFront = false;
+        _arrivals?.Dispose();
+        _arrivals = null;
         _pane.Active = false;
         if (!Navigation.NavigationStack.Contains(this))
         {

@@ -13,6 +13,10 @@ internal sealed class ThreadView : ScreenView
 {
     private readonly CollectionView _list;
     private readonly Entry _compose;
+    private readonly Button _send;
+    private readonly Button _attach;
+    private readonly SendGate _sending = new();   // one send at a time: a tap while one is on its way sends nothing
+    private IReadOnlyList<ThreadRow> _rows = [];
     private readonly Label _replyingTo;
     private readonly Grid _replyBar;
     private Conversation _conversation;
@@ -57,10 +61,11 @@ internal sealed class ThreadView : ScreenView
         _replyBar.Add(cancelReply, 1);
 
         _compose = new Entry { Placeholder = ViewText.Get("TypeMessage"), ReturnType = ReturnType.Send };
-        _compose.Completed += async (_, _) => await SendAsync();
-        var send = new Button { Text = ViewText.Get("Send"), BackgroundColor = screens.Accent, TextColor = Colors.White };
+        _compose.Completed += async (_, _) => await SendAsync();   // the keyboard's Send key: the same send, the same gate
+        var send = _send = new Button { Text = ViewText.Get("Send"), BackgroundColor = screens.Accent, TextColor = Colors.White };
         send.Clicked += async (_, _) => await SendAsync();
-        var attach = new Button { Text = "+", FontSize = 22, BackgroundColor = Colors.Transparent, TextColor = screens.Accent, Padding = 0, WidthRequest = 44 };
+        _sending.Changed += () => Dispatcher.Dispatch(ShowSending);
+        var attach = _attach = new Button { Text = "+", FontSize = 22, BackgroundColor = Colors.Transparent, TextColor = screens.Accent, Padding = 0, WidthRequest = 44 };
         SemanticProperties.SetDescription(attach, ViewText.Get("Attach"));
         attach.Clicked += async (_, _) => await AttachAsync();
         var composeBar = new Grid { Padding = new Thickness(8, 6), ColumnSpacing = 8, ColumnDefinitions = [new(GridLength.Auto), new(GridLength.Star), new(GridLength.Auto)] };
@@ -80,6 +85,9 @@ internal sealed class ThreadView : ScreenView
     public override Conversation Subject => _conversation;
 
     public override Task AppearingAsync() => LoadAsync();
+
+    // An arrival in this conversation (or one the host cannot place) reads it again, as its pull-down does (#26).
+    protected override (Guid Conversation, Func<Task> Read)? ReloadsOnArrival => (_conversation.Id, () => LoadAsync(quiet: true));
 
     // Restored history says so; where every member is here it offers to continue (core #1813), in place of the compose bar.
     private View HistoryBar(Conversation conversation)
@@ -118,7 +126,10 @@ internal sealed class ThreadView : ScreenView
         }
     }
 
-    private async Task LoadAsync()
+    private Task LoadAsync() => LoadAsync(quiet: false);
+
+    // quiet: nobody asked for this read (an arrival), so a failure goes to the caller rather than in front of anyone.
+    private async Task LoadAsync(bool quiet)
     {
         try
         {
@@ -161,45 +172,66 @@ internal sealed class ThreadView : ScreenView
                 return;
             }
 
-            _list.ItemsSource = rows;
+            _list.ItemsSource = _rows = rows;
             if (messages.Count > 0)
             {
                 await session.Api.MarkReadAsync(_conversation, messages[^1].SentAt);
                 await Host.ConversationsChangedAsync();   // its unread count is gone from a list beside it
             }
         }
-        catch (Exception exception)
+        catch (Exception exception) when (!quiet)
         {
             await ShowAsync(exception);
         }
     }
 
+    // One send at a time (SendGate): from the tap until the server answers, Send and the keyboard's key do nothing, the
+    // text stays in the field, read-only, and the thread shows it as "sending…". Answered, the field empties; refused or
+    // failed, the text stays there to be sent again — never sent twice by itself.
     private async Task SendAsync()
     {
         var text = _compose.Text?.Trim();
-        if (string.IsNullOrEmpty(text) || _page is null)
+        if (string.IsNullOrEmpty(text) || _page is null || _sending.Sending)
         {
             return;
         }
 
+        var sent = false;
         try
         {
-            await Screens.Session.SendAsync(_conversation, _page, text, _replyTo?.Message.Id);
-            _compose.Text = string.Empty;
-            Reply(null);
+            sent = await _sending.SendAsync(async () =>
+            {
+                _list.ItemsSource = _rows.Append(ThreadRows.Sending(text, Screens.Session.Me)).ToList();
+                await Screens.Session.SendAsync(_conversation, _page, text, _replyTo?.Message.Id);
+                _compose.Text = string.Empty;
+                Reply(null);
+            });
         }
         catch (Exception exception)
         {
+            _list.ItemsSource = _rows;   // not sent: the bubble on its way goes, the text is still in the field
             await ShowAsync(exception);
+            return;
         }
 
-        await LoadAsync();
+        if (sent)
+        {
+            await LoadAsync();
+        }
+    }
+
+    // While a message is on its way: Send and the attachment button disabled, the field read-only.
+    private void ShowSending()
+    {
+        var sending = _sending.Sending;
+        _send.IsEnabled = _attach.IsEnabled = !sending;
+        _compose.IsReadOnly = sending;
     }
 
     // A photo or a file, sealed to every member and sent with whatever is typed as its caption (core #1809).
     private async Task AttachAsync()
     {
-        if (_page is null)
+        if (_page is null || _sending.Sending)
         {
             return;
         }
@@ -231,9 +263,16 @@ internal sealed class ThreadView : ScreenView
                 return;
             }
 
-            await Screens.Session.SendFileAsync(_conversation, _page, content, file.FileName,
-                file.ContentType ?? "application/octet-stream", _compose.Text?.Trim() ?? string.Empty);
-            _compose.Text = string.Empty;
+            var caption = _compose.Text?.Trim() ?? string.Empty;
+            if (!await _sending.SendAsync(async () =>
+            {
+                await Screens.Session.SendFileAsync(_conversation, _page, content, file.FileName,
+                    file.ContentType ?? "application/octet-stream", caption);
+                _compose.Text = string.Empty;
+            }))
+            {
+                return;   // a message went meanwhile: this one is not sent behind its back
+            }
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
@@ -269,6 +308,11 @@ internal sealed class ThreadView : ScreenView
 
     private async Task ActAsync(ThreadRow row)
     {
+        if (row.IsSending)
+        {
+            return;   // on its way: nothing to do with it until the server has it
+        }
+
         var actions = new List<string>();
         if (row.File is not null)
         {

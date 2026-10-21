@@ -35,6 +35,7 @@ public static class ViewText
         ["Deleted"] = ("This message was deleted.", "Diese Nachricht wurde gelöscht.", "Questo messaggio è stato eliminato.", "Este mensaje fue eliminado."),
         ["CannotOpen"] = ("This message cannot be opened.", "Diese Nachricht lässt sich nicht öffnen.", "Questo messaggio non può essere aperto.", "Este mensaje no se puede abrir."),
         ["Edited"] = ("edited", "bearbeitet", "modificato", "editado"),
+        ["Sending"] = ("sending…", "wird gesendet…", "invio in corso…", "enviando…"),
         ["You"] = ("You", "Sie", "Tu", "Usted"),
         ["LeftMark"] = ("left", "verlassen", "lasciata", "abandonada"),
         ["LeftReadOnly"] = ("You left this conversation: what you were a member for is here to read.",
