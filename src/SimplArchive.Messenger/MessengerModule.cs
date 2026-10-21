@@ -13,6 +13,13 @@ public sealed class MessengerModule : IIndustryModule
     /// <summary>The setting naming the repository or folder conversations are filed under; chosen by an administrator.</summary>
     public const string RepositorySetting = "messenger.repositoryId";
 
+    /// <summary>
+    /// The setting that keeps opened files in the app (#27): on, a phone or desktop never hands a file to another app, and
+    /// what it cannot show itself stays closed. Off — and unset, which is every tenant until an administrator decides —
+    /// a file can be handed on, deliberately and after a warning that it leaves the Messenger's protection.
+    /// </summary>
+    public const string FilesStayInAppSetting = "messenger.filesStayInApp";
+
     public string ModuleId => "messenger";
 
     public string DisplayName => "Messenger";
@@ -55,6 +62,13 @@ public sealed class MessengerModule : IIndustryModule
         new(RepositorySetting, "Where conversations are filed",
             Description: "The id of the repository or folder group conversations and the shared folders of one-to-one chats "
                 + "are created in. Its rights should be an administrator's: members get access to their own conversations only."),
+        new(FilesStayInAppSetting, "Keep files in the app",
+            Description: "On: a sent file opens only in the app and is never handed to another app; what the app cannot show "
+                + "stays closed. Off (the default): such a file can be handed on, deliberately and after a warning that it "
+                + "leaves the app's protection.")
+        {
+            Kind = ModuleSettingKind.Boolean,
+        },
     ];
 
     public IReadOnlyList<ModuleReadModelSet> ReadModels { get; } = [new ModuleReadModelSet(typeof(MessengerReadModelContext))];

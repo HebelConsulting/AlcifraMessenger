@@ -72,10 +72,14 @@ certificates they enrol are the ones conversations are sealed to.
   created there. Give it an administrator's rights only: each member gets access to their own conversations and
   nothing else, and the Messenger keeps those rights in step with each conversation's members.
 + *Let people enrol.* Members need an enrolled certificate before anyone can start a conversation with them.
++ *Decide whether files may leave the app.* The setting _Keep files in the app_#idx("Keep files in the app") is off by
+  default: a file the app cannot show can then be handed to another app, deliberately and after a warning. Turned on,
+  files open only in the app and nothing hands them on (see _Photos and files_).
 
 ```sh
 saconsole module activate --module messenger
 echo <repository id> | saconsole module settings set messenger messenger.repositoryId --stdin
+echo true | saconsole module settings set messenger messenger.filesStayInApp --stdin   # optional
 ```
 
 Every user's personal space gets a folder *My Messages*#idx("My Messages"), provisioned by the archive while the module
@@ -161,6 +165,13 @@ own chat folder.
   previews, text recognition, retention schedules and legal holds: the archive cannot read them, and their lifetime is
   the conversation's.
 - *Delete for me* removes your reference; *delete for everyone* removes the file for all.
+
+*Opening a file keeps it in the app*#idx("opening a file") wherever the app can show it, because a file handed to
+another app is a readable copy the Messenger no longer protects. Photos, PDFs and plain text, video and sound open in
+the app, from memory: nothing of them is written to the device's storage. Anything else, an office document say, can
+only be handed on: never by a tap, always from the menu (*Open with…* or *Share*), and only after a warning that the
+file leaves the app unsealed. Where the tenant keeps files in the app, the menu offers neither, and a file the app
+cannot show says so and stays closed.
 
 // ─────────────────────────────────────────────────────────────────────────────
 = Backing up and restoring

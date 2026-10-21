@@ -48,6 +48,12 @@ public sealed class ConversationResource : HypermediaResource
 
     /// <summary>The caller left (or was removed): they read the stretch they were a member, as history.</summary>
     public bool Left { get; set; }
+
+    /// <summary>
+    /// The tenant keeps opened files in the app (#27): a client offers no Open with or Share for them, and what it cannot
+    /// show itself stays closed. False — also from a module that predates the setting — lets a file be handed on.
+    /// </summary>
+    public bool FilesStayInApp { get; set; }
 }
 
 /// <summary>A member, with the address that removes them (or, for the caller, lets them leave).</summary>

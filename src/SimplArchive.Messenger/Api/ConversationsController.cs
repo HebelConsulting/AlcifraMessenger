@@ -12,7 +12,8 @@ namespace SimplArchive.Messenger.Api;
 [Authorize]
 [Route(Base)]
 public sealed class ConversationsController(
-    Conversations conversations, Messages messages, Restores restores, Continuations continuations, IModuleArchiveFacade archive) : ControllerBase
+    Conversations conversations, Messages messages, Restores restores, Continuations continuations, Files files, IModuleArchiveFacade archive)
+    : ControllerBase
 {
     public const string Base = "api/modules/messenger/conversations";
 
@@ -200,18 +201,22 @@ public sealed class ConversationsController(
     private async Task<List<ConversationResource>> ResourcesAsync(IEnumerable<Conversations.View> views, CancellationToken cancellationToken)
     {
         var resources = new List<ConversationResource>();
+        var stayInApp = await files.StayInAppAsync(cancellationToken);   // the tenant's, read once for the whole list
         foreach (var view in views)
         {
-            resources.Add(await ResourceAsync(view, cancellationToken));
+            resources.Add(await ResourceAsync(view, stayInApp, cancellationToken));
         }
 
         return resources;
     }
 
     private async Task<ConversationResource> ResourceAsync(Conversations.View view, CancellationToken cancellationToken) =>
-        Resource(view, view.Restored is null && await continuations.HasEarlierAsync(view.Id, cancellationToken));
+        await ResourceAsync(view, await files.StayInAppAsync(cancellationToken), cancellationToken);
 
-    private static ConversationResource Resource(Conversations.View view, bool hasEarlier)
+    private async Task<ConversationResource> ResourceAsync(Conversations.View view, bool stayInApp, CancellationToken cancellationToken) =>
+        Resource(view, view.Restored is null && await continuations.HasEarlierAsync(view.Id, cancellationToken), stayInApp);
+
+    private static ConversationResource Resource(Conversations.View view, bool hasEarlier, bool stayInApp)
     {
         var self = $"/{Base}/{view.Id}";
         return new ConversationResource
@@ -255,6 +260,7 @@ public sealed class ConversationsController(
             RestoredFrom = view.Restored?.OriginInstance,
             IsReadOnly = view.IsReadOnly,
             Left = view.HasLeft,
+            FilesStayInApp = stayInApp,
             Links =
             [
                 new Link("self", self, "GET"),

@@ -88,6 +88,12 @@ public sealed class Conversation : Resource
     /// <summary>The caller left (or was removed): they read the stretch they were a member, as history.</summary>
     public bool Left { get; set; }
 
+    /// <summary>
+    /// The tenant keeps opened files in the app (#27): no Open with or Share, and what the app cannot show stays closed.
+    /// False — also from a server module that predates the setting — lets a file be handed on, deliberately.
+    /// </summary>
+    public bool FilesStayInApp { get; set; }
+
     /// <summary>The id bound into every message's associated data.</summary>
     public Guid SealedUnder => SealedUnderId == Guid.Empty ? Id : SealedUnderId;
 }
