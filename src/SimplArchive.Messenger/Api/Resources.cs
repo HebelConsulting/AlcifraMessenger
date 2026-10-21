@@ -278,3 +278,28 @@ public sealed class ContinueRequest
 {
     public List<KeyRequest> Keys { get; set; } = [];
 }
+
+/// <summary>The caller's own preferences (#26), with the tag a PUT sends back as If-Match.</summary>
+public sealed class PreferencesResource : HypermediaResource
+{
+    /// <summary>
+    /// The typing indicator, reciprocal: on, the others see when the caller types and the caller sees when they do; off,
+    /// neither. On unless the caller switched it off.
+    /// </summary>
+    public bool TypingIndicator { get; set; } = true;
+
+    /// <summary>The tag of what was read; a PUT sends it back as If-Match.</summary>
+    public string ETag { get; set; } = string.Empty;
+}
+
+/// <summary>The caller's preferences, whole.</summary>
+public sealed class PreferencesRequest
+{
+    public bool TypingIndicator { get; set; } = true;
+}
+
+/// <summary>The caller started or stopped typing.</summary>
+public sealed class TypingRequest
+{
+    public bool Typing { get; set; }
+}

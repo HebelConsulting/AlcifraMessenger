@@ -37,6 +37,8 @@ internal sealed class ServerRig : IAsyncDisposable
 
     public FakeNotices Notices { get; } = new();
 
+    public FakeLiveEvents Live { get; } = new();
+
     public MessengerApi Api { get; private set; } = null!;
 
     /// <summary>A user of the tenant with an enrolled key (<paramref name="certificatePem"/>, or a placeholder) and a My Messages folder.</summary>
@@ -67,6 +69,7 @@ internal sealed class ServerRig : IAsyncDisposable
         builder.Services.AddSingleton<IModuleArchiveFacade>(Archive);
         builder.Services.AddSingleton<IModuleCallerContext>(Caller);
         builder.Services.AddSingleton<IModuleNotices>(Notices);
+        builder.Services.AddSingleton<IModuleLiveEvents>(Live);
         module.ConfigureServices(builder.Services);
 
         _app = builder.Build();

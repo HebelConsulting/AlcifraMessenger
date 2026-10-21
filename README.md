@@ -29,10 +29,12 @@ arrives slice by slice.
 - **Screens, `SimplArchive.Messenger.Views`**: the conversation list, the thread (bubbles, replies, edit and delete,
   leaving a group) and the people picker, code-only .NET MAUI for Android, in English, German, Italian and Spanish; on
   a tablet's wide window, the conversations beside the open conversation.
-- **Free, no licence:** the module needs no licence file (core ABI 1.23), wherever it runs. `demo/up.sh` is the
+- **Free, no licence:** the module needs no licence file (core ABI 1.23), wherever it runs. From 0.8.0 it needs a core
+  with ABI 1.25, whose live hub carries its "is typing" events. `demo/up.sh` is the
   standalone start: one command to a SimplArchive with the Messenger active and test certificates enrolled.
 - **On the phone:** the screens run in SimplArchive Mobile's Messages tile — groups with administrators, photos and
-  files, read receipts, and a "new messages" push that opens its conversation and reloads the open screen. An opened
+  files, read receipts, "Anna is typing…" (on by default, switched off both ways in the Messenger's settings), and a
+  "new messages" push that opens its conversation and reloads the open screen. An opened
   file stays in the app wherever the app can show it (photos, PDFs, plain text, video and sound, from memory); anything
   else is handed on only from the menu and after a warning, and a tenant can keep files in the app altogether.
 - **Backup and restore:** a user's conversations in one sealed file (`MessengerBackup`), restored on another

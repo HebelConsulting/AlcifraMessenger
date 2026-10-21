@@ -17,7 +17,7 @@
          with the app's own (when its build Mac has macOS 26 and Xcode 27). -->
     <ValidateXcodeVersion Condition="'$(TargetFramework)' == 'net10.0-ios26.0'">false</ValidateXcodeVersion>
     <PackageId>SimplArchive.Messenger.Views</PackageId>
-    <Version>0.12.1</Version>
+    <Version>0.13.0</Version>
     <Description>The SimplArchive Messenger's screens for a cross-platform app: conversations, the thread and the people picker, side by side on a tablet.</Description>
     <Authors>Hebel Consulting</Authors>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>

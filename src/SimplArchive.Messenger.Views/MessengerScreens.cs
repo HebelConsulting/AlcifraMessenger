@@ -33,15 +33,19 @@ public interface IFilePreview
 
 /// <summary>
 /// The Messenger's screens for a host app: what the host supplies — its <see cref="ChatSession"/> (signed-in connection,
-/// hardware-key opener), its accent colour, how a file is handed on, its document preview and how a page keeps clear of
-/// the keyboard — is a constructor argument, so leaving one out does not compile.
+/// hardware-key opener), its accent colour, how a file is handed on, its document preview, how a page keeps clear of
+/// the keyboard and its live connection — is a constructor argument, so leaving one out does not compile.
 /// </summary>
 /// <param name="preview">Where a PDF or a plain text opens: the host's own preview, in the app (#27).</param>
 /// <param name="keepClearOfKeyboard">Applied to every page the screens build, so the compose field stays above the
 /// keyboard: the host's own way, as for its other pages (on Android 15+, drawn edge to edge, the system no longer
 /// resizes the window for it; on iOS a host may pad the page in front itself and pass a no-op).</param>
+/// <param name="live">The Messenger's events off the host's own live connection, the one its notifications arrive on
+/// (#26): "Anna is typing…" in a thread. A host without one passes <see cref="NoLiveEvents.Instance"/>; nothing is then
+/// shown, and the caller's own typing is still sent.</param>
 public sealed class MessengerScreens(
-    ChatSession session, Color accent, IFileHandoff handoff, IFilePreview preview, Action<ContentPage> keepClearOfKeyboard)
+    ChatSession session, Color accent, IFileHandoff handoff, IFilePreview preview, Action<ContentPage> keepClearOfKeyboard,
+    IMessengerLiveEvents live)
 {
     /// <summary>The caller's conversations: where the Messages tile opens, as on a phone.</summary>
     public Page Conversations() => Conversations(split: false);
@@ -108,6 +112,8 @@ public sealed class MessengerScreens(
     internal IFileHandoff Handoff => handoff;
 
     internal IFilePreview Preview => preview;
+
+    internal IMessengerLiveEvents Live => live;
 
     /// <summary>Keeps <paramref name="page"/>'s bottom edge clear of the keyboard, as the host does it.</summary>
     internal void KeepClearOfKeyboard(ContentPage page) => keepClearOfKeyboard(page);

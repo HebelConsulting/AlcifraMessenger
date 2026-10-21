@@ -153,3 +153,30 @@ internal sealed class FakeNotices : IModuleNotices
         return Task.CompletedTask;
     }
 }
+
+/// <summary>The core's live hub, recorded: every event the module sent; set <see cref="Refuse"/> to have it refused.</summary>
+internal sealed class FakeLiveEvents : IModuleLiveEvents
+{
+    public List<ModuleLiveEvent> Sent { get; } = [];
+
+    public ModuleLiveEventRefusedException? Refuse { get; set; }
+
+    public Task<int> SendAsync(ModuleLiveEvent liveEvent, CancellationToken cancellationToken = default)
+    {
+        if (Refuse is { } refusal)
+        {
+            throw refusal;
+        }
+
+        Sent.Add(liveEvent);
+        return Task.FromResult(liveEvent.RecipientUserIds.Count);
+    }
+}
+
+/// <summary>A clock the test moves.</summary>
+internal sealed class FakeClock : TimeProvider
+{
+    public DateTimeOffset Now { get; set; } = new(2026, 10, 21, 12, 0, 0, TimeSpan.Zero);
+
+    public override DateTimeOffset GetUtcNow() => Now;
+}

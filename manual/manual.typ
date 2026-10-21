@@ -142,6 +142,19 @@ Beneath your latest message that somebody has read, the thread shows *"Read"* in
 conversation, not a mark per message, and it is always on: the same marker that counts your unread messages and
 clears the notification is what the others see.
 
+== Typing
+
+While someone types in a conversation you have open, the thread says so beneath the messages: *"Anna is typing…"*,
+*"Anna and Tom are typing…"*, or in a busy group *"Several people are typing…"*. It goes away when they send, stop, or
+after a few seconds without a keystroke.
+
+It is *on by default* and works *both ways*#idx("typing indicator"): switched off under *Messenger settings* in the
+conversation list's menu, the others no longer see when you type, and you no longer see when they do. The setting is
+yours alone and follows you to every device.
+
+Only an app that is open hears it: nothing is stored, nothing is pushed to a closed app. The server learns *that*
+someone types, and where — never what.
+
 == The "New messages" notification
 
 When a message arrives, every other member gets a notification that says *"New messages"* — never the sender, never the
@@ -213,6 +226,7 @@ saconsole messenger restore --file conversations.simplarchive-messages
   [who is in which conversation, and who administers a group], [the text of any message],
   [who sends when, and how large each message and file is], [the content of any photo or file],
   [read markers, edits and deletions — that they happened], [any conversation key],
+  [that someone is typing, and in which conversation], [what they are typing],
   [a group's name, and the names on chat folders], [],
 )
 

@@ -68,6 +68,38 @@ public sealed class WireTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task Typing_reaches_the_other_member_and_switching_it_off_takes_the_link_away_both_ways()
+    {
+        var api = await _rig.StartAsync();
+        _rig.Caller.UserId = _anna;
+        await api.DiscoverAsync();
+        var group = await api.CreateGroupAsync(await api.ConversationsAsync(), "Team", [new ClientKey(_anna, [1]), new ClientKey(_tom, [2])]);
+
+        // On by default: the thread offers typing, and the event goes to Tom, never back to Anna.
+        Assert.True(Client.Display.TypingRule.Sends(group));
+        await api.TypingAsync(group, typing: true);
+        var sent = Assert.Single(_rig.Live.Sent);
+        Assert.Equal([_tom], sent.RecipientUserIds);
+        Assert.Equal(new Client.Display.TypingEvent(group.Id, _anna, true), Client.Display.TypingEvent.Parse(sent.Name, sent.Payload));
+
+        // Tom switches it off, under the tag of his read: his conversations no longer offer typing, so his app neither
+        // sends nor shows it, and Anna's typing is not sent to him.
+        _rig.Caller.UserId = _tom;
+        var list = await api.ConversationsAsync();
+        var mine = await api.PreferencesAsync(list);
+        Assert.True(mine.TypingIndicator);
+        var off = await api.ReplacePreferencesAsync(mine, typingIndicator: false);
+        Assert.False(off.TypingIndicator);
+        Assert.False(Client.Display.TypingRule.Shows(Assert.Single((await api.ConversationsAsync()).Items)));
+        var stale = await Assert.ThrowsAsync<MessengerApiException>(() => api.ReplacePreferencesAsync(mine, typingIndicator: true));
+        Assert.Equal((412, "ETAG_MISMATCH"), (stale.StatusCode, stale.Code));
+
+        _rig.Caller.UserId = _anna;
+        await api.TypingAsync(group, typing: false);   // answered alike; nobody is left to tell
+        Assert.Single(_rig.Live.Sent);
+    }
+
+    [Fact]
     public async Task Whether_files_stay_in_the_app_travels_on_every_conversation_and_only_an_explicit_yes_keeps_them()
     {
         var api = await _rig.StartAsync();

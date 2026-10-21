@@ -7,7 +7,8 @@ namespace SimplArchive.Messenger.Views;
 
 /// <summary>
 /// One conversation: bubbles oldest first, a reply's quote inside its bubble, and the compose bar. Tapping a bubble offers
-/// what may be done with it; opening the thread marks it read. A page of its own on a phone, the right pane on a tablet.
+/// what may be done with it; opening the thread marks it read. Beneath the messages, who is typing (#26). A page of its
+/// own on a phone, the right pane on a tablet.
 /// </summary>
 internal sealed class ThreadView : ScreenView
 {
@@ -20,6 +21,11 @@ internal sealed class ThreadView : ScreenView
     private IReadOnlyList<ThreadRow> _rows = [];
     private readonly Label _replyingTo;
     private readonly Grid _replyBar;
+    private readonly Label _typingLine;
+    private readonly TypingSignal _typingSignal = new();   // when the compose field says "I am typing" and "I stopped"
+    private readonly TypingIndicator _typers;              // who else types here, each forgotten soon after their last event
+    private IDisposable? _typingEvents;
+    private IDispatcherTimer? _typingTimer;
     private Conversation _conversation;
     private MessagePage? _page;
     private ThreadRow? _replyTo;
@@ -28,6 +34,7 @@ internal sealed class ThreadView : ScreenView
         : base(screens, host)
     {
         _conversation = conversation;
+        _typers = new TypingIndicator(screens.Session.Me);
         Title = ThreadRows.Title(conversation);
         List<ScreenAction> actions = [new(ViewText.Get("Refresh"), LoadAsync)];
         if (!conversation.IsDirect && !conversation.IsReadOnly)
@@ -62,6 +69,9 @@ internal sealed class ThreadView : ScreenView
         _replyBar.Add(cancelReply, 1);
 
         _compose = new Entry { Placeholder = ViewText.Get("TypeMessage"), ReturnType = ReturnType.Send };
+        // "Is typing" (#26): a keystroke may start or refresh it, leaving the field stops it.
+        _compose.TextChanged += (_, e) => SignalTyping(_typingSignal.Typed(DateTimeOffset.UtcNow, !string.IsNullOrWhiteSpace(e.NewTextValue)));
+        _compose.Unfocused += (_, _) => SignalTyping(_typingSignal.Stopped());
         _compose.Completed += async (_, _) => await SendAsync();   // the keyboard's Send key: the same send, the same gate
         var send = _send = new Button { Text = ViewText.Get("Send"), BackgroundColor = screens.Accent, TextColor = Colors.White };
         send.Clicked += async (_, _) => await SendAsync();
@@ -74,11 +84,18 @@ internal sealed class ThreadView : ScreenView
         composeBar.Add(_compose, 1);
         composeBar.Add(send, 2);
 
-        var page = new Grid { RowDefinitions = [new(GridLength.Star), new(GridLength.Auto), new(GridLength.Auto)] };
+        _typingLine = new Label
+        {
+            FontSize = 12, FontAttributes = FontAttributes.Italic, TextColor = Colors.Gray, Padding = new Thickness(16, 2),
+            LineBreakMode = LineBreakMode.TailTruncation, IsVisible = false,
+        };
+
+        var page = new Grid { RowDefinitions = [new(GridLength.Star), new(GridLength.Auto), new(GridLength.Auto), new(GridLength.Auto)] };
         page.Add(PullToRefresh.Around(_list, LoadAsync), 0, 0);   // as its Refresh does
-        page.Add(_replyBar, 0, 1);
+        page.Add(_typingLine, 0, 1);   // under the thread, above the compose bar: who is typing
+        page.Add(_replyBar, 0, 2);
         // Restored history (core #1813) is read, not continued: where the compose bar would be, it says so.
-        page.Add(conversation.IsReadOnly ? HistoryBar(conversation) : composeBar, 0, 2);
+        page.Add(conversation.IsReadOnly ? HistoryBar(conversation) : composeBar, 0, 3);
         Content = page;
     }
 
@@ -90,6 +107,94 @@ internal sealed class ThreadView : ScreenView
 
     // An arrival in this conversation (or one the host cannot place) reads it again, as its pull-down does (#26).
     protected override (Guid Conversation, Func<Task> Read)? ReloadsOnArrival => (_conversation.Id, () => LoadAsync(ReadReason.Arrival, quiet: true));
+
+    // On show, the thread hears "is typing" for its conversation off the host's live connection and ticks once a second:
+    // the caller's idle stop, and the typers' expiry. Off show, it stops listening, tells the others the caller stopped,
+    // and forgets who typed — what it hears next time starts afresh.
+    protected override void Showing(bool showing)
+    {
+        if (showing)
+        {
+            _typingEvents ??= Screens.Live.Subscribe(HeardLive);
+            if (_typingTimer is null)
+            {
+                _typingTimer = Dispatcher.CreateTimer();
+                _typingTimer.Interval = TimeSpan.FromSeconds(1);
+                _typingTimer.Tick += (_, _) =>
+                {
+                    var now = DateTimeOffset.UtcNow;
+                    SignalTyping(_typingSignal.Tick(now));
+                    if (_typers.Expire(now))
+                    {
+                        ShowTypers();
+                    }
+                };
+                _typingTimer.Start();
+            }
+
+            return;
+        }
+
+        _typingEvents?.Dispose();
+        _typingEvents = null;
+        _typingTimer?.Stop();
+        _typingTimer = null;
+        SignalTyping(_typingSignal.Stopped());
+        _typers.Clear();
+        ShowTypers();
+    }
+
+    // Off the connection's thread: only this conversation's typing, drawn on the UI thread.
+    private void HeardLive(string name, string payload)
+    {
+        if (TypingEvent.Parse(name, payload) is not { } heard || heard.Conversation != _conversation.Id)
+        {
+            return;
+        }
+
+        Dispatcher.Dispatch(() =>
+        {
+            if (!IsClosed && TypingRule.Shows(_conversation) && _typers.Received(heard.User, heard.Typing, DateTimeOffset.UtcNow))
+            {
+                ShowTypers();
+            }
+        });
+    }
+
+    // "Anna is typing…" beneath the messages, or nothing; nothing at all where the caller's indicator is off (reciprocal).
+    private void ShowTypers()
+    {
+        if (!TypingRule.Shows(_conversation))
+        {
+            _typers.Clear();
+        }
+
+        var line = _typers.Line(_conversation);
+        _typingLine.Text = line;
+        _typingLine.IsVisible = line is not null;
+    }
+
+    // Tells the others, best effort: a typing state lost on the way is worth nothing a few seconds later anyway.
+    private void SignalTyping(TypingSend send)
+    {
+        if (send == TypingSend.Nothing || !TypingRule.Sends(_conversation))
+        {
+            return;
+        }
+
+        var conversation = _conversation;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Screens.Session.Api.TypingAsync(conversation, send == TypingSend.Start);
+            }
+            catch (Exception)
+            {
+                // Nobody asked to be told it failed: the next keystroke or refresh says it again.
+            }
+        });
+    }
 
     // Restored history says so; where every member is here it offers to continue (core #1813), in place of the compose bar.
     private View HistoryBar(Conversation conversation)
@@ -171,6 +276,7 @@ internal sealed class ThreadView : ScreenView
             }
 
             _conversation = conversation;
+            ShowTypers();   // the caller may have switched the indicator off meanwhile: then nobody's typing shows
             var (first, messages) = await session.MessagesAsync(_conversation);
             _page = first;
             var opened = new List<OpenedMessage>();
@@ -235,6 +341,7 @@ internal sealed class ThreadView : ScreenView
             return;
         }
 
+        SignalTyping(_typingSignal.Stopped());   // what was typed is on its way: no longer typing
         var sent = false;
         try
         {
@@ -309,6 +416,7 @@ internal sealed class ThreadView : ScreenView
             }
 
             var caption = _compose.Text?.Trim() ?? string.Empty;
+            SignalTyping(_typingSignal.Stopped());
             if (!await _sending.SendAsync(async () =>
             {
                 await Screens.Session.SendFileAsync(_conversation, _page, content, file.FileName,

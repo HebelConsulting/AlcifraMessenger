@@ -258,6 +258,26 @@ namespace SimplArchive.Messenger.ReadModel.Migrations
 
                     b.ToTable("msg_restored_conversations", (string)null);
                 });
+
+            modelBuilder.Entity("SimplArchive.Messenger.ReadModel.UserPreferences", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ConcurrencyToken")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("TypingIndicator")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("TenantId", "UserId");
+
+                    b.ToTable("msg_user_preferences", (string)null);
+                });
 #pragma warning restore 612, 618
         }
     }

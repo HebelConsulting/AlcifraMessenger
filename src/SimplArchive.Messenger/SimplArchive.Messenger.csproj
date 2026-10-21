@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <!-- The module's own version; the ABI package below is the contract it is written against. -->
-    <Version>0.7.0</Version>
+    <Version>0.8.0</Version>
     <AssemblyName>SimplArchive.Messenger</AssemblyName>
     <RootNamespace>SimplArchive.Messenger</RootNamespace>
     <PackageId>SimplArchive.Messenger</PackageId>
@@ -20,7 +20,7 @@
 
   <ItemGroup>
     <!-- Pinned exactly: an ABI minor can be binary breaking, so the version compiled against is worth reading off. -->
-    <PackageReference Include="SimplArchive.ModuleAbi" Version="1.23.0" />
+    <PackageReference Include="SimplArchive.ModuleAbi" Version="1.25.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.13" />
     <!-- The module owns its read-model migrations; the host applies them. Npgsql shapes them for production, the
          Design package generates them. -->

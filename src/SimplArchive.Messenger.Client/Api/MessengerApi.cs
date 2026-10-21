@@ -106,6 +106,25 @@ public sealed class MessengerApi(HttpClient http, HttpClient? storage = null)
     public Task MarkReadAsync(Conversation conversation, DateTimeOffset readUpTo, CancellationToken cancellationToken = default) =>
         SendAsync(Follow(conversation, "receipt"), new { readUpTo }, cancellationToken);
 
+    /// <summary>
+    /// The caller started (<paramref name="typing"/>) or stopped typing in <paramref name="conversation"/> (#26). Offered
+    /// only where the caller's typing indicator is on; the server tells the other members' open apps, and answers alike
+    /// whether it did.
+    /// </summary>
+    public Task TypingAsync(Conversation conversation, bool typing, CancellationToken cancellationToken = default) =>
+        SendAsync(Follow(conversation, "typing"), new { typing }, cancellationToken);
+
+    /// <summary>The caller's own preferences (#26), from the conversation list's <c>preferences</c> link.</summary>
+    public Task<MessengerPreferences> PreferencesAsync(ConversationList list, CancellationToken cancellationToken = default) =>
+        GetAsync<MessengerPreferences>(Follow(list, "preferences").Href, cancellationToken);
+
+    /// <summary>
+    /// Replaces the caller's preferences, provided nobody changed them since <paramref name="read"/> (another device): a
+    /// refusal is <c>ETAG_MISMATCH</c>. Returns them as stored, with their new tag.
+    /// </summary>
+    public Task<MessengerPreferences> ReplacePreferencesAsync(MessengerPreferences read, bool typingIndicator, CancellationToken cancellationToken = default) =>
+        SendAsync<MessengerPreferences>(new Link("replace", Follow(read, "self").Href, "PUT"), new { typingIndicator }, cancellationToken, read.ETag);
+
     /// <summary>The first page of messages, oldest first.</summary>
     public Task<MessagePage> MessagesAsync(Conversation conversation, CancellationToken cancellationToken = default) =>
         GetAsync<MessagePage>(Follow(conversation, "messages").Href, cancellationToken);

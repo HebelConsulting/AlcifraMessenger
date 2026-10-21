@@ -12,7 +12,8 @@ namespace SimplArchive.Messenger.Api;
 [Authorize]
 [Route(Base)]
 public sealed class ConversationsController(
-    Conversations conversations, Messages messages, Restores restores, Continuations continuations, Files files, IModuleArchiveFacade archive)
+    Conversations conversations, Messages messages, Restores restores, Continuations continuations, Files files,
+    Preferences preferences, Typing typing, IModuleArchiveFacade archive)
     : ControllerBase
 {
     public const string Base = "api/modules/messenger/conversations";
@@ -28,6 +29,8 @@ public sealed class ConversationsController(
                 new Link("open-direct", $"/{Base}/direct", "POST"),
                 new Link("create-group", $"/{Base}", "POST"),
                 new Link("restore", $"/{Base}/restores", "POST"),
+                // The caller's own preferences (#26): GET reads them, PUT replaces them (ADR 0719: one rel).
+                new Link("preferences", $"/{PreferencesController.Base}", "GET"),
             ],
         };
 
@@ -196,27 +199,41 @@ public sealed class ConversationsController(
         return NoContent();
     }
 
+    /// <summary>
+    /// The caller started or stopped typing (#26): the other members' open apps are told, unless the caller or they
+    /// switched the typing indicator off. The state replaces the last one and is stored nowhere, so it carries no
+    /// precondition; whatever happens to the event, the answer is the same.
+    /// </summary>
+    [HttpPut("{id:guid}/typing")]
+    public async Task<IActionResult> SetTyping(Guid id, [FromBody] TypingRequest request, CancellationToken cancellationToken)
+    {
+        await typing.SetAsync(id, request.Typing, cancellationToken);
+        return NoContent();
+    }
+
     private static List<WrappedKey> Keys(IEnumerable<KeyRequest> keys) => [.. keys.Select(k => new WrappedKey(k.UserId, k.Key))];
 
     private async Task<List<ConversationResource>> ResourcesAsync(IEnumerable<Conversations.View> views, CancellationToken cancellationToken)
     {
         var resources = new List<ConversationResource>();
         var stayInApp = await files.StayInAppAsync(cancellationToken);   // the tenant's, read once for the whole list
+        var typingOn = await preferences.TypingIndicatorAsync(cancellationToken);   // the caller's, likewise
         foreach (var view in views)
         {
-            resources.Add(await ResourceAsync(view, stayInApp, cancellationToken));
+            resources.Add(await ResourceAsync(view, stayInApp, typingOn, cancellationToken));
         }
 
         return resources;
     }
 
     private async Task<ConversationResource> ResourceAsync(Conversations.View view, CancellationToken cancellationToken) =>
-        await ResourceAsync(view, await files.StayInAppAsync(cancellationToken), cancellationToken);
+        await ResourceAsync(view, await files.StayInAppAsync(cancellationToken), await preferences.TypingIndicatorAsync(cancellationToken),
+            cancellationToken);
 
-    private async Task<ConversationResource> ResourceAsync(Conversations.View view, bool stayInApp, CancellationToken cancellationToken) =>
-        Resource(view, view.Restored is null && await continuations.HasEarlierAsync(view.Id, cancellationToken), stayInApp);
+    private async Task<ConversationResource> ResourceAsync(Conversations.View view, bool stayInApp, bool typingOn, CancellationToken cancellationToken) =>
+        Resource(view, view.Restored is null && await continuations.HasEarlierAsync(view.Id, cancellationToken), stayInApp, typingOn);
 
-    private static ConversationResource Resource(Conversations.View view, bool hasEarlier, bool stayInApp)
+    private static ConversationResource Resource(Conversations.View view, bool hasEarlier, bool stayInApp, bool typingOn)
     {
         var self = $"/{Base}/{view.Id}";
         return new ConversationResource
@@ -268,6 +285,9 @@ public sealed class ConversationsController(
                 new Link("receipt", $"{self}/receipt", "PUT"),
                 // A restore files a backup's files here too, before importing the messages that carry them.
                 .. view.HasLeft ? Array.Empty<Link>() : [new Link("upload-file", $"{self}/files", "POST")],
+                // "Is typing" (#26), where the caller's indicator is on: they say when they type, and are told when others
+                // do. Off, there is no link, and a client neither sends nor shows. History is not typed in.
+                .. typingOn && !view.IsReadOnly ? [new Link("typing", $"{self}/typing", "PUT")] : Array.Empty<Link>(),
                 .. view.Restored is not null ? [new Link("import", $"{self}/imports", "POST")] : Array.Empty<Link>(),
                 // GET says who is here; POST continues. One rel, the method says which (ADR 0719).
                 .. view.Restored is { IsReadOnly: true, ContinuedInConversationId: null } ? [new Link("continuation", $"{self}/continuation", "GET")] : Array.Empty<Link>(),

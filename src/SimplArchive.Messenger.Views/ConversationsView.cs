@@ -64,6 +64,7 @@ internal sealed class ConversationsView : ContentView
             _list.ItemsSource = _conversations.Items;
             _empty.IsVisible = _conversations.Items.Count == 0;
             _shell.Listed(_conversations.Items);
+            _shell.PreferencesOffered(_conversations.Offers("preferences") ? _conversations : null);
         }
         catch (Exception exception) when (!quiet)
         {

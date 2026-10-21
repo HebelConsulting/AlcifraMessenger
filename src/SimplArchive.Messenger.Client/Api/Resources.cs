@@ -279,3 +279,19 @@ public sealed class ContinuationMember : Resource
     /// <summary>Their user id here; null when nobody matches.</summary>
     public Guid? UserId { get; set; }
 }
+
+/// <summary>
+/// The caller's own Messenger preferences (#26), read from the conversation list's <c>preferences</c> link and replaced
+/// whole with <see cref="MessengerApi.ReplacePreferencesAsync"/> under the tag read.
+/// </summary>
+public sealed class MessengerPreferences : Resource
+{
+    /// <summary>
+    /// The typing indicator, reciprocal: on, the others see when the caller types and the caller sees when they do; off,
+    /// neither. On unless the caller switched it off.
+    /// </summary>
+    public bool TypingIndicator { get; set; } = true;
+
+    /// <summary>The tag of this read: what a replacement sends as If-Match.</summary>
+    public string ETag { get; set; } = string.Empty;
+}

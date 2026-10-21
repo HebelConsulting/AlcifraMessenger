@@ -88,5 +88,10 @@ public sealed class MessengerModule : IIndustryModule
         services.AddScoped<Files>();
         services.AddScoped<Restores>();
         services.AddScoped<Continuations>();
+        services.AddScoped<Preferences>();
+        services.AddScoped<Typing>();
+
+        // One per process: it remembers each sender's last start across requests (#26).
+        services.AddSingleton<TypingThrottle>();
     }
 }
