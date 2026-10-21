@@ -3,28 +3,33 @@ using SimplArchive.Messenger.Client.Api;
 namespace SimplArchive.Messenger.Views;
 
 /// <summary>
-/// A screen as a page of its own, as on a phone: its title and actions in the toolbar, a screen it opens pushed over
-/// it. Built again from <see cref="Build"/> when a tablet's window widens and the page goes back into the pane.
+/// A screen as a page of its own, as on a phone: the same header the tablet's pane draws (the title, the screen's
+/// actions as words, ⋮ for the rest) is drawn into the page's navigation bar, whose back arrow is the page's Back; the
+/// bar's colours, the status bar and whatever the host adds to the toolbar (its way home) stay the host's. A screen it
+/// opens is pushed over it. Built again from <see cref="Build"/> when a tablet's window widens and the page goes back
+/// into the pane.
 /// </summary>
 internal sealed class ScreenPage : ContentPage, IScreenHost
 {
     private readonly MessengerScreens _screens;
-    private readonly Action<ScreenPage>? _resized;
+    private readonly ConversationsPage? _list;
+    private ScreenHeader _header;
 
     /// <param name="screens">The Messenger's screens.</param>
     /// <param name="build">Builds the screen with this page as its host.</param>
-    /// <param name="resized">Told when the page's size changed, by a split that pushed it (null: none did); passed on to
-    /// every page this one opens.</param>
-    public ScreenPage(MessengerScreens screens, Func<IScreenHost, ScreenView> build, Action<ScreenPage>? resized)
+    /// <param name="list">The conversations page beneath, told what happened here (a conversation shown, created or
+    /// left, a size change); passed on to every page this one opens. Null: none is.</param>
+    public ScreenPage(MessengerScreens screens, Func<IScreenHost, ScreenView> build, ConversationsPage? list)
     {
-        (_screens, Build, _resized) = (screens, build, resized);
+        (_screens, Build, _list) = (screens, build, list);
+        _header = Header(Colors.White);
         View = build(this);
         View.Changed += Draw;
         Draw();
         Content = View;
-        if (resized is not null)
+        if (list is not null)
         {
-            SizeChanged += (_, _) => resized(this);
+            SizeChanged += (_, _) => list.Resized(this);
         }
     }
 
@@ -36,9 +41,25 @@ internal sealed class ScreenPage : ContentPage, IScreenHost
 
     Page IScreenHost.Page => this;
 
+    // In the bar's own text colour where the host set one.
+    protected override void OnParentSet()
+    {
+        base.OnParentSet();
+        if (Parent is NavigationPage { BarTextColor: { } ink })
+        {
+            _header = Header(ink);
+            Draw();
+        }
+    }
+
     protected override async void OnAppearing()
     {
         base.OnAppearing();
+        if (View.Subject is { } conversation)
+        {
+            _list?.Visited(conversation.Id);   // what the list marks for a moment when Back returns to it
+        }
+
         await View.AppearingAsync();
     }
 
@@ -51,14 +72,19 @@ internal sealed class ScreenPage : ContentPage, IScreenHost
         }
     }
 
-    Task IScreenHost.OpenAsync(Func<IScreenHost, ScreenView> screen) => Navigation.PushAsync(new ScreenPage(_screens, screen, _resized));
+    Task IScreenHost.OpenAsync(Func<IScreenHost, ScreenView> screen) => Navigation.PushAsync(new ScreenPage(_screens, screen, _list));
 
     Task IScreenHost.BackAsync() => Navigation.PopAsync();
 
+    // The conversation takes this page's place; the list beneath is read at once, so Back finds it there already.
     async Task IScreenHost.ShowConversationAsync(Conversation conversation)
     {
-        Navigation.InsertPageBefore(new ScreenPage(_screens, _screens.Thread(conversation), _resized), this);
+        Navigation.InsertPageBefore(new ScreenPage(_screens, _screens.Thread(conversation), _list), this);
         await Navigation.PopAsync();
+        if (_list is not null)
+        {
+            await _list.ReloadAsync();
+        }
     }
 
     // Out of the conversation: back past its screens (its thread, its members), which can no longer be opened, to the list.
@@ -77,18 +103,16 @@ internal sealed class ScreenPage : ContentPage, IScreenHost
 
     Task IScreenHost.ConversationsChangedAsync() => Task.CompletedTask;   // the list beneath reads itself when it is back
 
+    private ScreenHeader Header(Color ink)
+    {
+        var header = new ScreenHeader(ink, this, inBar: true) { HorizontalOptions = LayoutOptions.Fill };
+        NavigationPage.SetTitleView(this, header);
+        return header;
+    }
+
     private void Draw()
     {
         Title = View.Title;
-        ToolbarItems.Clear();
-        foreach (var action in View.Actions)
-        {
-            ToolbarItems.Add(new ToolbarItem
-            {
-                Text = action.Text,
-                Order = action.Secondary ? ToolbarItemOrder.Secondary : ToolbarItemOrder.Default,
-                Command = new Command(async () => await action.Act()),
-            });
-        }
+        _header.Show(View.Title, View.Actions, back: null);
     }
 }

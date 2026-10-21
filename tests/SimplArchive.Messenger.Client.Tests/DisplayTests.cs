@@ -240,6 +240,19 @@ public sealed class DisplayTests
         Assert.Null(MessagesSplit.AfterReload(null, [other, fresh]));             // nothing selected stays nothing
     }
 
+    [Fact]
+    public void Back_on_a_phone_marks_the_conversation_it_came_from_for_a_moment_and_never_beside_a_pane()
+    {
+        var team = new Conversation { Id = Guid.NewGuid(), Name = "Team" };
+        var other = new Conversation { Id = Guid.NewGuid(), Name = "Other" };
+
+        Assert.Equal(team.Id, MessagesSplit.ReturnMark(team.Id, [other, team], splits: false));
+        Assert.Null(MessagesSplit.ReturnMark(team.Id, [other, team], splits: true));   // the selection's mark, which stays
+        Assert.Null(MessagesSplit.ReturnMark(team.Id, [other], splits: false));        // left it: nothing to find
+        Assert.Null(MessagesSplit.ReturnMark(null, [other, team], splits: false));
+        Assert.InRange(MessagesSplit.ReturnMarkFor, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(3));   // a moment, not a state
+    }
+
     private static OpenedMessage At(OpenedMessage message, DateTimeOffset sentAt)
     {
         message.Message.SentAt = sentAt;
