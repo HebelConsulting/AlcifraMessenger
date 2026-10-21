@@ -5,6 +5,8 @@
 # Every packable project is packed; --skip-duplicate makes a version that is already there a no-op, so a tag publishes
 # exactly the packages whose version was bumped. A version on nuget.org is permanent (it can be unlisted, never deleted),
 # so only a tagged commit publishes, after CI.
+#
+# On a Mac: the screens carry an iOS build, which only Xcode makes, and their project refuses to pack without it.
 name: Publish
 
 on:
@@ -18,15 +20,15 @@ permissions:
 
 jobs:
   publish:
-    runs-on: ubuntu-latest
+    runs-on: macos-26
     environment: nuget
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
         with:
           global-json-file: global.json
-      - name: Install the MAUI Android workload
-        run: dotnet workload install maui-android
+      - name: Install the MAUI workloads
+        run: dotnet workload install maui-android maui-ios
       - name: Test
         run: dotnet test SimplArchiveMessenger.slnx -c Release
       - name: Pack

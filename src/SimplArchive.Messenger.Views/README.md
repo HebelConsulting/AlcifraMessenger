@@ -36,10 +36,27 @@ that the file leaves the app unsealed and is no longer protected by it. A tenant
 (the module's setting *Keep files in the app*, carried on every conversation as `FilesStayInApp`): the menu then offers
 neither, and a file the app cannot show says so and stays closed.
 
-The player is the toolkit's `MediaElement`, which plays from a stream; the host registers it once on its app builder:
+A video or a sound plays in `MemoryPlayer`, a public control a host's own document preview can show too, so a document
+and a sent file play alike; `MediaTypes` (in the client library) is the one rule for which types play, and
+`FileOpening` asks it. **Sealed content never touches storage** (owner decision, 2026-10-21): what the key opened is
+decrypted in memory, and a file written for a player would be a readable copy outside the app's control, left behind by a
+crash. So the player reads the bytes where they are:
+
+- on Android, the toolkit's `MediaElement` plays a stream over them;
+- on iOS, the system player (`AVPlayer` in an `AVPlayerViewController`) is given an asset at an address of a scheme of
+  its own, which it cannot fetch, so it asks a resource loader for everything: the type (the uniform type identifier
+  `MediaTypes` names), the length, that any range may be read, and each range — a seek's, and "everything to the end" —
+  answered from the array in pieces of at most 1 MiB (`MemoryRanges`), a request the player abandons no longer answered.
+  The package therefore carries an iOS build (`net10.0-ios26.0`), which only a Mac with Xcode makes: it is built there
+  and packed there, and packing anywhere else refuses rather than ship a package that plays nothing on an iPhone.
+
+Call `Stop()` when the page showing it closes. The host registers the players once on its app builder — the toolkit's
+own call stays in the host, chained to `UseMauiApp`, because the toolkit's analyzer looks for it there:
 
 ```csharp
-builder.UseMauiCommunityToolkitMediaElement(isAndroidForegroundServiceEnabled: false);
+builder.UseMauiApp<App>()
+    .UseMauiCommunityToolkitMediaElement(isAndroidForegroundServiceEnabled: false)
+    .UseMessengerPlayer();   // iOS: the system player reading from memory
 ```
 
 With `split: true`, a window at least 700 points wide shows the conversations beside the open conversation, as a
