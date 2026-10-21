@@ -93,6 +93,10 @@ public static class ViewText
         ["FileTooLarge"] = ("This file is too large to send (at most 95 MB).", "Diese Datei ist zu gross zum Senden (höchstens 95 MB).",
             "Questo file è troppo grande da inviare (al massimo 95 MB).", "Este archivo es demasiado grande para enviarlo (como máximo 95 MB)."),
         ["Failed"] = ("Something went wrong", "Etwas ist schiefgegangen", "Qualcosa è andato storto", "Algo salió mal"),
+        ["SelectConversation"] = ("Select a conversation to read it here.", "Wählen Sie eine Unterhaltung, um sie hier zu lesen.",
+            "Seleziona una conversazione per leggerla qui.", "Seleccione una conversación para leerla aquí."),
+        ["Back"] = ("Back", "Zurück", "Indietro", "Atrás"),
+        ["More"] = ("More", "Mehr", "Altro", "Más"),
         ["NotAvailable"] = ("Messages are not available for you here.", "Nachrichten sind hier für Sie nicht verfügbar.",
             "I messaggi non sono disponibili per te qui.", "Los mensajes no están disponibles para usted aquí."),
     };

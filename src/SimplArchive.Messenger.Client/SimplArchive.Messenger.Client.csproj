@@ -4,7 +4,7 @@
     <!-- The Messenger's client side, free of any user interface: the message format, the conversation keys and the key
          ring. Used by the SimplArchive app's Messages tile and by the standalone messenger app. -->
     <PackageId>SimplArchive.Messenger.Client</PackageId>
-    <Version>0.8.0</Version>
+    <Version>0.9.0</Version>
     <Description>The SimplArchive Messenger's client library: end-to-end sealed messages and conversation keys, free of any user interface.</Description>
     <Authors>Hebel Consulting</Authors>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>

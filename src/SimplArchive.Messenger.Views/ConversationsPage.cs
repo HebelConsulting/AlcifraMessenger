@@ -3,107 +3,250 @@ using SimplArchive.Messenger.Client.Api;
 
 namespace SimplArchive.Messenger.Views;
 
-/// <summary>The caller's conversations, with unread counts; new chats and groups from the toolbar.</summary>
+/// <summary>
+/// Where the Messages tile opens: the caller's conversations, and — where the host asked for the split and the window
+/// is wide enough (<see cref="MessagesSplit"/>) — the open conversation beside them, as the desktop's Messages tab shows
+/// it. Narrow, it is exactly the phone's list: a tapped conversation is a page of its own.
+/// <para>
+/// The page owns the selection: the list marks it, the pane renders it, and neither tells the other. A tapped row, a
+/// new chat or group, a continued history: each becomes the selected conversation. New chat, New group and a group's
+/// members take the pane in its place, the list staying. When the window narrows, what the pane shows becomes the pages
+/// in front, as shown; when it widens while only pages of the Messenger's screens are in front of the list, they go back
+/// into the pane.
+/// </para>
+/// </summary>
 internal sealed class ConversationsPage : ContentPage
 {
     private readonly MessengerScreens _screens;
-    private readonly CollectionView _list;
-    private readonly Label _empty;
-    private ConversationList? _conversations;
+    private readonly bool _split;
+    private readonly ConversationsView _list;
+    private readonly ScreenPane _pane;
+    private readonly ColumnDefinition _listColumn = new(GridLength.Star);
+    private readonly ColumnDefinition _dividerColumn = new(0);
+    private readonly ColumnDefinition _paneColumn = new(0);
+    private readonly BoxView _divider;
+    private Guid? _selected;   // the conversation the pane shows; null while it shows none (or a new chat)
+    private bool _splits;
+    private bool _inFront;
+    private bool _moving;
 
-    public ConversationsPage(MessengerScreens screens)
+    /// <param name="screens">The Messenger's screens.</param>
+    /// <param name="split">Whether the host offers the split here; without it the page is the phone's list at any width.</param>
+    /// <param name="selected">The conversation to show selected (a "new messages" push): beside the list, or pushed as
+    /// its page once the window turns out narrow.</param>
+    public ConversationsPage(MessengerScreens screens, bool split, Conversation? selected = null)
     {
-        _screens = screens;
+        (_screens, _split) = (screens, split);
         Title = ViewText.Get("Messages");
-        ToolbarItems.Add(new ToolbarItem { Text = ViewText.Get("NewChat"), Command = new Command(async () => await OpenAsync(screens.NewChat)) });
-        ToolbarItems.Add(new ToolbarItem { Text = ViewText.Get("NewGroup"), Command = new Command(async () => await OpenAsync(screens.NewGroup)) });
+        _list = new ConversationsView(screens, this);
+        foreach (var action in _list.Actions)
+        {
+            ToolbarItems.Add(new ToolbarItem { Text = action.Text, Command = new Command(async () => await action.Act()) });
+        }
 
-        _empty = new Label { Text = ViewText.Get("NoConversations"), IsVisible = false, Margin = 24, HorizontalTextAlignment = TextAlignment.Center };
-        _list = new CollectionView
+        _pane = new ScreenPane(screens, this) { IsVisible = false };
+        _divider = new BoxView { Color = screens.Accent.WithAlpha(0.2f), IsVisible = false };
+        var grid = new Grid { ColumnSpacing = 0, ColumnDefinitions = [_listColumn, _dividerColumn, _paneColumn] };
+        grid.Add(_list, 0);
+        grid.Add(_divider, 1);
+        grid.Add(_pane, 2);
+        Content = grid;
+        if (split)
         {
-            SelectionMode = SelectionMode.Single,
-            ItemTemplate = new DataTemplate(() => Row(screens.Accent)),
-        };
-        _list.SelectionChanged += async (_, e) =>
-        {
-            if (e.CurrentSelection.FirstOrDefault() is Conversation chosen)
+            SizeChanged += (_, _) => Arrange();
+            if (selected is not null)
             {
-                _list.SelectedItem = null;
-                await Navigation.PushAsync(screens.Thread(chosen));
+                Select(selected);
             }
-        };
-        var refresh = new RefreshView { Content = _list };
-        refresh.Command = new Command(async () =>
-        {
-            await LoadAsync();
-            refresh.IsRefreshing = false;
-        });
-        Content = new Grid { Children = { refresh, _empty } };
+        }
     }
 
     protected override async void OnAppearing()
     {
         base.OnAppearing();
-        await LoadAsync();
+        _inFront = true;
+        Arrange();   // a narrowing while covered is done now
+        await _list.LoadAsync();
     }
 
-    private async Task LoadAsync()
+    protected override void OnDisappearing()
     {
+        base.OnDisappearing();
+        _inFront = false;
+        _pane.Active = false;
+        if (!Navigation.NavigationStack.Contains(this))
+        {
+            _pane.Clear();
+        }
+    }
+
+    /// <summary>A row was tapped: selected beside the list in a wide window, its own page on a phone. A conversation
+    /// shown already stays as it is; one with its members open over it goes back to its thread.</summary>
+    public async Task OpenAsync(Conversation conversation)
+    {
+        if (!_splits)
+        {
+            await PushAsync([_screens.Thread(conversation)]);
+            return;
+        }
+
+        if (_selected != conversation.Id || _pane.Root?.Id != conversation.Id || _pane.Depth > 1)
+        {
+            Select(conversation);
+        }
+    }
+
+    /// <summary>New chat or New group: in the pane in place of the conversation, the list staying; a page on a phone.</summary>
+    public async Task CreateAsync(PeopleMode mode, ConversationList list)
+    {
+        var people = _screens.People(mode, list);
+        if (!_splits)
+        {
+            await PushAsync([people]);
+            return;
+        }
+
+        _selected = null;
+        _list.Mark(null);
+        _pane.Show(people);
+    }
+
+    /// <summary>The list was read again: the pane keeps the same conversation, its fresh row marked, or empties when it
+    /// left the list. A new chat being chosen in the pane stays as it is.</summary>
+    public void Listed(IReadOnlyList<Conversation> rows)
+    {
+        if (_selected is not { } id)
+        {
+            return;
+        }
+
+        if (MessagesSplit.AfterReload(id, rows) is null)
+        {
+            Deselect();
+        }
+        else
+        {
+            _list.Mark(id);
+        }
+    }
+
+    /// <summary>A screen in the pane resulted in a conversation (a new chat or group, a continued history): it is the
+    /// selected one now, and the list is read again to show it.</summary>
+    public async Task ShowConversationAsync(Conversation conversation)
+    {
+        Select(conversation);
+        await _list.LoadAsync();
+    }
+
+    /// <summary>The caller left the conversation in the pane: nothing is selected, and the list is read again.</summary>
+    public async Task LeftAsync()
+    {
+        Deselect();
+        await _list.LoadAsync();
+    }
+
+    /// <summary>Something the list shows changed (a thread in the pane was read): it is read again.</summary>
+    public Task ReloadAsync() => _list.LoadAsync();
+
+    private void Select(Conversation conversation)
+    {
+        _selected = conversation.Id;
+        _list.Mark(conversation.Id);
+        _pane.Show(_screens.Thread(conversation));
+    }
+
+    private void Deselect()
+    {
+        _selected = null;
+        _list.Mark(null);
+        _pane.Clear();
+    }
+
+    // The window's width decides, on every size change (rotation, a tablet's split screen); with the split not offered,
+    // never. Narrowing with something in the pane moves it into pages — only while this page is in front; covered, it is
+    // done when the page comes back.
+    private void Arrange()
+    {
+        if (Width <= 0)
+        {
+            return;   // not laid out yet: neither layout is known
+        }
+
+        _splits = _split && MessagesSplit.Splits(Width);
+        _listColumn.Width = _splits ? new GridLength(MessagesSplit.ListWidth(Width)) : GridLength.Star;
+        _dividerColumn.Width = new GridLength(_splits ? 1 : 0);
+        _paneColumn.Width = _splits ? GridLength.Star : new GridLength(0);
+        _divider.IsVisible = _pane.IsVisible = _splits;
+        _pane.Active = _splits && _inFront;
+        if (_splits || _moving || !_pane.Shows || !_inFront || Navigation.NavigationStack.LastOrDefault() != this)
+        {
+            return;
+        }
+
+        var builds = _pane.Take();
+        _selected = null;
+        _list.Mark(null);
+        _moving = true;
+        Dispatcher.Dispatch(async () =>
+        {
+            try
+            {
+                await PushAsync(builds);
+            }
+            finally
+            {
+                _moving = false;
+            }
+        });
+    }
+
+    private async Task PushAsync(IReadOnlyList<Func<IScreenHost, ScreenView>> builds)
+    {
+        foreach (var build in builds)
+        {
+            await Navigation.PushAsync(new ScreenPage(_screens, build, _split ? Resized : null), animated: builds.Count == 1);
+        }
+    }
+
+    // A page in front widened: when everything above this page is the Messenger's screens, they go back into the pane —
+    // the bottom one selected where it is a thread — and the pages close. A photo or anything else in front stays.
+    private async void Resized(ScreenPage page)
+    {
+        var stack = Navigation.NavigationStack;
+        var at = stack.ToList().IndexOf(this);
+        if (_moving || at < 0 || !MessagesSplit.Splits(page.Width) || stack[^1] != page)
+        {
+            return;
+        }
+
+        var above = stack.Skip(at + 1).ToList();
+        if (above.Count == 0 || above.Any(p => p is not ScreenPage))
+        {
+            return;
+        }
+
+        var pages = above.Cast<ScreenPage>().ToList();
+        foreach (var moved in pages)
+        {
+            moved.View.Close();   // built again in the pane: these views are let go of
+        }
+
+        _moving = true;
         try
         {
-            _conversations = await _screens.Session.Api.ConversationsAsync();
-            _list.ItemsSource = _conversations.Items;
-            _empty.IsVisible = _conversations.Items.Count == 0;
-        }
-        catch (Exception exception)
-        {
-            await MessengerScreens.ShowAsync(this, exception);
-        }
-    }
-
-    private async Task OpenAsync(Func<ConversationList, Page> page)
-    {
-        if (_conversations is { } list)
-        {
-            await Navigation.PushAsync(page(list));
-        }
-    }
-
-    // A conversation's row: its title, what kind it is, and an unread badge in the accent. Filled from its binding context
-    // rather than bound by path, so nothing depends on reflection.
-    private static View Row(Color accent)
-    {
-        var title = new Label { FontSize = 17, LineBreakMode = LineBreakMode.TailTruncation };
-        var kind = new Label { FontSize = 13, TextColor = Colors.Gray };
-        var count = new Label { TextColor = Colors.White, FontSize = 13, HorizontalTextAlignment = TextAlignment.Center, VerticalTextAlignment = TextAlignment.Center };
-        var badge = new Border
-        {
-            BackgroundColor = accent,
-            StrokeThickness = 0,
-            StrokeShape = new Microsoft.Maui.Controls.Shapes.RoundRectangle { CornerRadius = 11 },
-            MinimumWidthRequest = 22,
-            HeightRequest = 22,
-            Padding = new Thickness(6, 0),
-            VerticalOptions = LayoutOptions.Center,
-            Content = count,
-        };
-
-        var grid = new Grid { Padding = new Thickness(16, 10), ColumnDefinitions = [new(GridLength.Star), new(GridLength.Auto)] };
-        grid.Add(new VerticalStackLayout { Children = { title, kind } }, 0);
-        grid.Add(badge, 1);
-        grid.BindingContextChanged += (_, _) =>
-        {
-            if (grid.BindingContext is Conversation c)
+            _selected = pages[0].View.Subject?.Id;
+            _list.Mark(_selected);
+            _pane.Show([.. pages.Select(p => p.Build)]);
+            foreach (var beneath in pages.Take(pages.Count - 1))
             {
-                title.Text = ThreadRows.Title(c);
-                // History says so in the list: one the caller left, or one restored from a backup.
-                kind.Text = c.Left ? ViewText.Get("LeftMark") : c.Restored ? ViewText.Get("RestoredMark")
-                    : c.IsDirect ? string.Empty : ViewText.Get("GroupMembers", c.Members.Count);
-                kind.IsVisible = c.Left || c.Restored || !c.IsDirect;
-                count.Text = c.Unread.ToString(System.Globalization.CultureInfo.CurrentCulture);
-                badge.IsVisible = c.Unread > 0;
+                Navigation.RemovePage(beneath);
             }
-        };
-        return grid;
+
+            await Navigation.PopAsync(animated: false);
+        }
+        finally
+        {
+            _moving = false;
+        }
     }
 }

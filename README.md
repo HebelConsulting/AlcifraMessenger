@@ -27,7 +27,8 @@ arrives slice by slice.
   [manual/SimplArchive-Messenger-Module-Manual.pdf](manual/SimplArchive-Messenger-Module-Manual.pdf), says what the
   server can and cannot see.
 - **Screens, `SimplArchive.Messenger.Views`**: the conversation list, the thread (bubbles, replies, edit and delete,
-  leaving a group) and the people picker, code-only .NET MAUI for Android, in English, German, Italian and Spanish.
+  leaving a group) and the people picker, code-only .NET MAUI for Android, in English, German, Italian and Spanish; on
+  a tablet's wide window, the conversations beside the open conversation.
 - **Free, no licence:** the module needs no licence file (core ABI 1.23), wherever it runs. `demo/up.sh` is the
   standalone start: one command to a SimplArchive with the Messenger active and test certificates enrolled.
 - **On the phone:** the screens run in SimplArchive Mobile's Messages tile — groups with administrators, photos and

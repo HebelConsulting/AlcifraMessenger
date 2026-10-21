@@ -6,20 +6,21 @@ namespace SimplArchive.Messenger.Views;
 /// <summary>
 /// A group's members (core #1810): administrators first, each tap offering what the caller may do — make or revoke
 /// administrator, remove, or for oneself leave — and, for an administrator, adding someone. What adding and removing
-/// mean for reading is said plainly before it happens.
+/// mean for reading is said plainly before it happens. A page of its own on a phone; on a tablet it takes the right pane
+/// in place of the group's thread, the conversations staying beside it.
 /// </summary>
-internal sealed class MembersPage : ContentPage
+internal sealed class MembersView : ScreenView
 {
-    private readonly MessengerScreens _screens;
     private readonly CollectionView _list;
-    private readonly ToolbarItem _add;
+    private readonly ScreenAction _add;
     private Conversation _group;
 
-    public MembersPage(MessengerScreens screens, Conversation group)
+    public MembersView(MessengerScreens screens, IScreenHost host, Conversation group)
+        : base(screens, host)
     {
-        (_screens, _group) = (screens, group);
+        _group = group;
         Title = ViewText.Get("Members");
-        _add = new ToolbarItem { Text = ViewText.Get("AddMember"), Command = new Command(async () => await Navigation.PushAsync(screens.AddMember(_group))) };
+        _add = new ScreenAction(ViewText.Get("AddMember"), () => Host.OpenAsync(Screens.AddMember(_group)));
         _list = new CollectionView { SelectionMode = SelectionMode.Single, ItemTemplate = new DataTemplate(() => Row(screens.Accent)) };
         _list.SelectionChanged += async (_, e) =>
         {
@@ -32,31 +33,29 @@ internal sealed class MembersPage : ContentPage
         Content = _list;
     }
 
-    protected override async void OnAppearing()
-    {
-        base.OnAppearing();
-        await LoadAsync();
-    }
+    public override Task AppearingAsync() => LoadAsync();
 
     private async Task LoadAsync()
     {
         try
         {
-            _group = await _screens.Session.Api.RefreshAsync(_group);
-            _list.ItemsSource = MemberRows.Build(_group, _screens.Session.Me);
-            var offersAdd = _group.Offers("add-member");
-            if (offersAdd && !ToolbarItems.Contains(_add))
+            var group = await Screens.Session.Api.RefreshAsync(_group);
+            if (IsClosed)
             {
-                ToolbarItems.Add(_add);
+                return;
             }
-            else if (!offersAdd)
+
+            _group = group;
+            _list.ItemsSource = MemberRows.Build(_group, Screens.Session.Me);
+            var offersAdd = _group.Offers("add-member");
+            if (offersAdd != Actions.Contains(_add))
             {
-                ToolbarItems.Remove(_add);
+                Actions = offersAdd ? [_add] : [];
             }
         }
         catch (Exception exception)
         {
-            await MessengerScreens.ShowAsync(this, exception);
+            await ShowAsync(exception);
         }
     }
 
@@ -88,35 +87,29 @@ internal sealed class MembersPage : ContentPage
             actions.Add(ViewText.Get("Leave"));
         }
 
-        var chosen = await DisplayActionSheetAsync(row.Name, ViewText.Get("Cancel"), null, [.. actions]);
+        var chosen = await Host.Page.DisplayActionSheetAsync(row.Name, ViewText.Get("Cancel"), null, [.. actions]);
         try
         {
             if (chosen == ViewText.Get("MakeAdmin"))
             {
-                await _screens.Session.Api.MakeAdminAsync(row.Member);
+                await Screens.Session.Api.MakeAdminAsync(row.Member);
             }
             else if (chosen == ViewText.Get("RevokeAdmin"))
             {
-                await _screens.Session.Api.RevokeAdminAsync(row.Member);
+                await Screens.Session.Api.RevokeAdminAsync(row.Member);
             }
             else if (chosen == ViewText.Get("Remove")
-                && await DisplayAlertAsync(ViewText.Get("Remove"), ViewText.Get("RemoveConfirm", row.Name), ViewText.Get("Yes"), ViewText.Get("No")))
+                && await Host.Page.DisplayAlertAsync(ViewText.Get("Remove"), ViewText.Get("RemoveConfirm", row.Name), ViewText.Get("Yes"), ViewText.Get("No")))
             {
                 // The next key is made here, on this administrator's device, for those who remain.
-                await _screens.Session.RemoveAsync(_group, row.Member);
+                await Screens.Session.RemoveAsync(_group, row.Member);
             }
             else if (chosen == ViewText.Get("Leave")
-                && await DisplayAlertAsync(ViewText.Get("Leave"), ViewText.Get("LeaveConfirm"), ViewText.Get("Yes"), ViewText.Get("No")))
+                && await Host.Page.DisplayAlertAsync(ViewText.Get("Leave"), ViewText.Get("LeaveConfirm"), ViewText.Get("Yes"), ViewText.Get("No")))
             {
-                await _screens.Session.LeaveAsync(_group);
+                await Screens.Session.LeaveAsync(_group);
                 // Out of the group: back past its thread, which this member can no longer open.
-                var thread = Navigation.NavigationStack.Count >= 2 ? Navigation.NavigationStack[^2] : null;
-                if (thread is ThreadPage)
-                {
-                    Navigation.RemovePage(thread);
-                }
-
-                await Navigation.PopAsync();
+                await Host.LeftAsync();
                 return;
             }
             else
@@ -126,7 +119,7 @@ internal sealed class MembersPage : ContentPage
         }
         catch (Exception exception)
         {
-            await MessengerScreens.ShowAsync(this, exception);
+            await ShowAsync(exception);
         }
 
         await LoadAsync();
