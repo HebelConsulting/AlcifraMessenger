@@ -2,8 +2,9 @@
 
 Opens CMS envelopes (S/MIME enveloped data) with the private key on a PIV hardware key, which never leaves it.
 
-- `PivSession`: selects the PIV application, verifies the PIN, reads the key-management certificate (slot 9D) and
-  performs the one private-key operation, over any `IApduTransport`.
+- `PivSession`: selects the PIV application, verifies the PIN, reads the key-management certificate (slot 9D), the
+  key's version and serial number where it answers them, and performs the one private-key operation, over any
+  `IApduTransport`.
 - `EnvelopeOpener`: finds the recipient addressed to that certificate and opens the envelope: RSA key transport
   (PKCS#1 v1.5 and OAEP) or elliptic-curve key agreement (ECDH, X9.63 KDF, RFC 3394 key wrap).
 - `IKeyConnector`: the one thing an app implements, connecting to the key over NFC or USB on its platform.

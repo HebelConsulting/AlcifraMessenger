@@ -21,7 +21,8 @@ public enum PivAlgorithm : byte
 
 /// <summary>
 /// The PIV application on a hardware key (NIST SP 800-73-4), reduced to what opening an envelope needs: select, verify
-/// the PIN, read the key-management certificate, and the one private-key operation (RSA decipher or ECDH).
+/// the PIN, read the key-management certificate, and the one private-key operation (RSA decipher or ECDH) — plus the
+/// key's version and serial number, which a support report names it by.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -80,6 +81,32 @@ public sealed class PivSession(IApduTransport transport)
 
         var data = Expect("reading the certificate", response);
         return X509CertificateLoader.LoadCertificate(Value(Value(data, 0x53), 0x70));
+    }
+
+    /// <summary>
+    /// The PIV application's firmware version as <c>major.minor.patch</c>, or null when the key does not answer it.
+    /// </summary>
+    /// <remarks>
+    /// GET VERSION (INS FD) is not part of NIST SP 800-73-4 but a widely implemented extension; a key without it answers
+    /// <c>6D00</c> (instruction not supported), which is a fact to report, not a failure. Public data: no PIN.
+    /// </remarks>
+    public string? ReadVersion()
+    {
+        var response = Send(0x00, 0xFD, 0x00, 0x00, []);
+        return StatusWord(response) == 0x9000 && response.Length >= 5 ? $"{response[0]}.{response[1]}.{response[2]}" : null;
+    }
+
+    /// <summary>The key's serial number in decimal, as printed on the key, or null when the key does not answer it.</summary>
+    /// <remarks>
+    /// GET SERIAL (INS F8), the same kind of extension as <see cref="ReadVersion"/>: four bytes, big-endian. Public data,
+    /// no PIN; a support report names the key by it.
+    /// </remarks>
+    public string? ReadSerialNumber()
+    {
+        var response = Send(0x00, 0xF8, 0x00, 0x00, []);
+        return StatusWord(response) == 0x9000 && response.Length >= 6
+            ? System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(response.AsSpan(0, 4)).ToString(System.Globalization.CultureInfo.InvariantCulture)
+            : null;
     }
 
     /// <summary>The raw RSA private operation on a ciphertext block (no padding removed): what the card computes.</summary>

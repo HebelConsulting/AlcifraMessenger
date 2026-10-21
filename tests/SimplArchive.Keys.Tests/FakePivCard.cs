@@ -11,7 +11,11 @@ namespace SimplArchive.Keys.Tests;
 /// a command in CLA 0x10 pieces, and hands out any answer over 256 bytes in 61xx pieces, so the session's chaining is
 /// exercised, not assumed.
 /// </summary>
-internal sealed class FakePivCard(X509Certificate2 certificate, AsymmetricAlgorithm privateKey, string pin = "123456") : IApduTransport
+/// <param name="version">What GET VERSION answers (three bytes), or null for a key without it (6D00).</param>
+/// <param name="serial">What GET SERIAL answers, or null for a key without it (6D00).</param>
+internal sealed class FakePivCard(
+    X509Certificate2 certificate, AsymmetricAlgorithm privateKey, string pin = "123456", byte[]? version = null, uint? serial = null)
+    : IApduTransport
 {
     private readonly List<byte> _chained = [];
     private byte[] _pending = [];
@@ -41,6 +45,8 @@ internal sealed class FakePivCard(X509Certificate2 certificate, AsymmetricAlgori
             0xA4 => [0x90, 0x00],
             0x20 => Verify(data),
             0xCB => Answer(PivSession.Tlv(0x53, [.. PivSession.Tlv(0x70, certificate.RawData), .. PivSession.Tlv(0x71, [0]), 0xFE, 0x00])),
+            0xFD when version is not null => [.. version, 0x90, 0x00],
+            0xF8 when serial is { } number => [(byte)(number >> 24), (byte)(number >> 16), (byte)(number >> 8), (byte)number, 0x90, 0x00],
             0x87 => _verified ? Answer(PivSession.Tlv(0x7C, PivSession.Tlv(0x82, Operate(apdu[2], data)))) : [0x69, 0x82],
             _ => [0x6D, 0x00],
         };
