@@ -7,11 +7,10 @@ namespace SimplArchive.Messenger.Views;
 
 /// <summary>
 /// One conversation: bubbles oldest first, a reply's quote inside its bubble, and the compose bar. Tapping a bubble offers
-/// what may be done with it; opening the thread marks it read.
+/// what may be done with it; opening the thread marks it read. A page of its own on a phone, the right pane on a tablet.
 /// </summary>
-internal sealed class ThreadPage : ContentPage
+internal sealed class ThreadView : ScreenView
 {
-    private readonly MessengerScreens _screens;
     private readonly CollectionView _list;
     private readonly Entry _compose;
     private readonly Label _replyingTo;
@@ -20,18 +19,20 @@ internal sealed class ThreadPage : ContentPage
     private MessagePage? _page;
     private ThreadRow? _replyTo;
 
-    public ThreadPage(MessengerScreens screens, Conversation conversation)
+    public ThreadView(MessengerScreens screens, IScreenHost host, Conversation conversation)
+        : base(screens, host)
     {
-        _screens = screens;
         _conversation = conversation;
         Title = ThreadRows.Title(conversation);
-        ToolbarItems.Add(new ToolbarItem { Text = ViewText.Get("Refresh"), Command = new Command(async () => await LoadAsync()) });
+        List<ScreenAction> actions = [new(ViewText.Get("Refresh"), LoadAsync)];
         if (!conversation.IsDirect && !conversation.IsReadOnly)
         {
             // A group's members, and what may be done with them (core #1810); leaving is there too, and here for speed.
-            ToolbarItems.Add(new ToolbarItem { Text = ViewText.Get("Members"), Command = new Command(async () => await Navigation.PushAsync(screens.Members(_conversation))) });
-            ToolbarItems.Add(new ToolbarItem { Text = ViewText.Get("Leave"), Order = ToolbarItemOrder.Secondary, Command = new Command(async () => await LeaveAsync()) });
+            actions.Add(new(ViewText.Get("Members"), () => Host.OpenAsync(Screens.Members(_conversation))));
+            actions.Add(new(ViewText.Get("Leave"), LeaveAsync, Secondary: true));
         }
+
+        Actions = actions;
 
         _list = new CollectionView
         {
@@ -75,11 +76,10 @@ internal sealed class ThreadPage : ContentPage
         Content = page;
     }
 
-    protected override async void OnAppearing()
-    {
-        base.OnAppearing();
-        await LoadAsync();
-    }
+    /// <summary>The conversation shown: what the list marks while it is in the pane.</summary>
+    public override Conversation Subject => _conversation;
+
+    public override Task AppearingAsync() => LoadAsync();
 
     // Restored history says so; where every member is here it offers to continue (core #1813), in place of the compose bar.
     private View HistoryBar(Conversation conversation)
@@ -92,7 +92,7 @@ internal sealed class ThreadPage : ContentPage
         });
         if (conversation.Offers("continuation"))
         {
-            var resume = new Button { Text = ViewText.Get("ContinueHere"), BackgroundColor = _screens.Accent, TextColor = Colors.White };
+            var resume = new Button { Text = ViewText.Get("ContinueHere"), BackgroundColor = Screens.Accent, TextColor = Colors.White };
             resume.Clicked += async (_, _) => await ContinueAsync();
             bar.Add(resume);
         }
@@ -105,17 +105,16 @@ internal sealed class ThreadPage : ContentPage
     {
         try
         {
-            var live = await _screens.Session.ContinueAsync(_conversation);
-            Navigation.InsertPageBefore(_screens.Thread(live), this);
-            await Navigation.PopAsync();
+            var live = await Screens.Session.ContinueAsync(_conversation);
+            await Host.ShowConversationAsync(live);
         }
         catch (ContinuationBlockedException blocked)
         {
-            await DisplayAlertAsync(ViewText.Get("ContinueHere"), ViewText.Get("ContinueMissing", string.Join(", ", blocked.Missing)), ViewText.Get("OK"));
+            await Host.Page.DisplayAlertAsync(ViewText.Get("ContinueHere"), ViewText.Get("ContinueMissing", string.Join(", ", blocked.Missing)), ViewText.Get("OK"));
         }
         catch (Exception exception)
         {
-            await MessengerScreens.ShowAsync(this, exception);
+            await ShowAsync(exception);
         }
     }
 
@@ -123,8 +122,14 @@ internal sealed class ThreadPage : ContentPage
     {
         try
         {
-            var session = _screens.Session;
-            _conversation = await session.Api.RefreshAsync(_conversation);
+            var session = Screens.Session;
+            var conversation = await session.Api.RefreshAsync(_conversation);
+            if (IsClosed)
+            {
+                return;   // let go of while it was read: nothing of it shows, nothing is marked read
+            }
+
+            _conversation = conversation;
             var (first, messages) = await session.MessagesAsync(_conversation);
             _page = first;
             var opened = new List<OpenedMessage>();
@@ -151,15 +156,21 @@ internal sealed class ThreadPage : ContentPage
             }
 
             rows.AddRange(ThreadRows.Build(_conversation, opened, session.Me));
+            if (IsClosed)
+            {
+                return;
+            }
+
             _list.ItemsSource = rows;
             if (messages.Count > 0)
             {
                 await session.Api.MarkReadAsync(_conversation, messages[^1].SentAt);
+                await Host.ConversationsChangedAsync();   // its unread count is gone from a list beside it
             }
         }
         catch (Exception exception)
         {
-            await MessengerScreens.ShowAsync(this, exception);
+            await ShowAsync(exception);
         }
     }
 
@@ -173,13 +184,13 @@ internal sealed class ThreadPage : ContentPage
 
         try
         {
-            await _screens.Session.SendAsync(_conversation, _page, text, _replyTo?.Message.Id);
+            await Screens.Session.SendAsync(_conversation, _page, text, _replyTo?.Message.Id);
             _compose.Text = string.Empty;
             Reply(null);
         }
         catch (Exception exception)
         {
-            await MessengerScreens.ShowAsync(this, exception);
+            await ShowAsync(exception);
         }
 
         await LoadAsync();
@@ -193,7 +204,7 @@ internal sealed class ThreadPage : ContentPage
             return;
         }
 
-        var chosen = await DisplayActionSheetAsync(ViewText.Get("Attach"), ViewText.Get("Cancel"), null,
+        var chosen = await Host.Page.DisplayActionSheetAsync(ViewText.Get("Attach"), ViewText.Get("Cancel"), null,
             ViewText.Get("TakePhoto"), ViewText.Get("ChoosePhoto"), ViewText.Get("ChooseFile"));
         try
         {
@@ -216,17 +227,17 @@ internal sealed class ThreadPage : ContentPage
 
             if (content.LongLength > MaxFileBytes)
             {
-                await DisplayAlertAsync(ViewText.Get("Failed"), ViewText.Get("FileTooLarge"), ViewText.Get("OK"));
+                await Host.Page.DisplayAlertAsync(ViewText.Get("Failed"), ViewText.Get("FileTooLarge"), ViewText.Get("OK"));
                 return;
             }
 
-            await _screens.Session.SendFileAsync(_conversation, _page, content, file.FileName,
+            await Screens.Session.SendFileAsync(_conversation, _page, content, file.FileName,
                 file.ContentType ?? "application/octet-stream", _compose.Text?.Trim() ?? string.Empty);
             _compose.Text = string.Empty;
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            await MessengerScreens.ShowAsync(this, exception);
+            await ShowAsync(exception);
         }
 
         await LoadAsync();
@@ -240,19 +251,19 @@ internal sealed class ThreadPage : ContentPage
     {
         try
         {
-            var content = await _screens.Session.OpenFileAsync(row.Message);
+            var content = await Screens.Session.OpenFileAsync(row.Message);
             if (row.File!.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
             {
-                await Navigation.PushAsync(new PhotoPage(_screens.Handoff, content, row.File.Name, row.File.ContentType));
+                await Host.Page.Navigation.PushAsync(new PhotoPage(Screens.Handoff, content, row.File.Name, row.File.ContentType));
             }
             else
             {
-                await _screens.Handoff.OpenWithAsync(content, row.File.Name, row.File.ContentType);
+                await Screens.Handoff.OpenWithAsync(content, row.File.Name, row.File.ContentType);
             }
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            await MessengerScreens.ShowAsync(this, exception);
+            await ShowAsync(exception);
         }
     }
 
@@ -285,7 +296,7 @@ internal sealed class ThreadPage : ContentPage
             actions.Add(ViewText.Get("WhoRead"));
         }
 
-        var chosen = await DisplayActionSheetAsync(null, ViewText.Get("Cancel"), null, [.. actions]);
+        var chosen = await Host.Page.DisplayActionSheetAsync(null, ViewText.Get("Cancel"), null, [.. actions]);
         try
         {
             if (chosen == ViewText.Get("Open"))
@@ -296,7 +307,7 @@ internal sealed class ThreadPage : ContentPage
 
             if (chosen == ViewText.Get("WhoRead"))
             {
-                await DisplayAlertAsync(row.Receipt, string.Join("\n", row.ReadBy), ViewText.Get("OK"));
+                await Host.Page.DisplayAlertAsync(row.Receipt, string.Join("\n", row.ReadBy), ViewText.Get("OK"));
                 return;
             }
 
@@ -307,17 +318,17 @@ internal sealed class ThreadPage : ContentPage
             }
 
             if (chosen == ViewText.Get("Edit")
-                && await DisplayPromptAsync(ViewText.Get("Edit"), null, ViewText.Get("OK"), ViewText.Get("Cancel"), initialValue: row.EditableText) is { Length: > 0 } edited)
+                && await Host.Page.DisplayPromptAsync(ViewText.Get("Edit"), null, ViewText.Get("OK"), ViewText.Get("Cancel"), initialValue: row.EditableText) is { Length: > 0 } edited)
             {
-                await _screens.Session.EditAsync(_conversation, row.Message, edited);
+                await Screens.Session.EditAsync(_conversation, row.Message, edited);
             }
             else if (chosen == ViewText.Get("DeleteForEveryone"))
             {
-                await _screens.Session.Api.DeleteForEveryoneAsync(row.Message);
+                await Screens.Session.Api.DeleteForEveryoneAsync(row.Message);
             }
             else if (chosen == ViewText.Get("DeleteForMe"))
             {
-                await _screens.Session.Api.HideForMeAsync(row.Message);
+                await Screens.Session.Api.HideForMeAsync(row.Message);
             }
             else
             {
@@ -326,7 +337,7 @@ internal sealed class ThreadPage : ContentPage
         }
         catch (Exception exception)
         {
-            await MessengerScreens.ShowAsync(this, exception);
+            await ShowAsync(exception);
         }
 
         await LoadAsync();
@@ -334,19 +345,19 @@ internal sealed class ThreadPage : ContentPage
 
     private async Task LeaveAsync()
     {
-        if (!await DisplayAlertAsync(ViewText.Get("Leave"), ViewText.Get("LeaveConfirm"), ViewText.Get("Yes"), ViewText.Get("No")))
+        if (!await Host.Page.DisplayAlertAsync(ViewText.Get("Leave"), ViewText.Get("LeaveConfirm"), ViewText.Get("Yes"), ViewText.Get("No")))
         {
             return;
         }
 
         try
         {
-            await _screens.Session.LeaveAsync(_conversation);
-            await Navigation.PopAsync();
+            await Screens.Session.LeaveAsync(_conversation);
+            await Host.LeftAsync();
         }
         catch (Exception exception)
         {
-            await MessengerScreens.ShowAsync(this, exception);
+            await ShowAsync(exception);
         }
     }
 

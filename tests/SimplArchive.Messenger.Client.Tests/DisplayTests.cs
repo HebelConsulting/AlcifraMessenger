@@ -212,6 +212,34 @@ public sealed class DisplayTests
         }
     }
 
+    [Theory]
+    [InlineData(-1, false)]      // not laid out yet: neither layout is known, so the phone's
+    [InlineData(699.9, false)]
+    [InlineData(700, true)]
+    [InlineData(1366, true)]
+    public void The_window_width_alone_decides_whether_the_conversation_shows_beside_the_list(double width, bool splits) =>
+        Assert.Equal(splits, MessagesSplit.Splits(width));
+
+    [Theory]
+    [InlineData(700, 320)]       // a third would be 233: the list keeps its narrowest column
+    [InlineData(1050, 350)]      // a third
+    [InlineData(1366, 400)]      // a third would be 455: the list stops at its widest
+    public void The_divider_is_fixed_at_about_a_third_clamped(double width, double list) =>
+        Assert.Equal(list, MessagesSplit.ListWidth(width));
+
+    [Fact]
+    public void After_the_list_is_read_again_the_pane_keeps_the_fresh_row_or_nothing()
+    {
+        var team = Guid.NewGuid();
+        var stale = new Conversation { Id = team, Name = "Team", Unread = 3 };
+        var fresh = new Conversation { Id = team, Name = "Team", Unread = 0 };
+        var other = new Conversation { Id = Guid.NewGuid(), Name = "Other" };
+
+        Assert.Same(fresh, MessagesSplit.AfterReload(stale.Id, [other, fresh]));   // today's row, not the one from before
+        Assert.Null(MessagesSplit.AfterReload(team, [other]));                    // left it: the pane empties
+        Assert.Null(MessagesSplit.AfterReload(null, [other, fresh]));             // nothing selected stays nothing
+    }
+
     private static OpenedMessage At(OpenedMessage message, DateTimeOffset sentAt)
     {
         message.Message.SentAt = sentAt;
