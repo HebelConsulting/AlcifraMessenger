@@ -12,16 +12,19 @@ namespace SimplArchive.Messenger.Views;
 internal sealed class ScreenHeader : ContentView
 {
     private readonly Color _ink;
+    private readonly Color? _titleInk;
     private readonly Page _dialogs;
     private readonly Grid _row = new() { Padding = new Thickness(4) };
 
     /// <param name="ink">The colour the header's title and buttons are drawn in: the accent in the pane, the bar's text
     /// colour in a navigation bar.</param>
     /// <param name="dialogs">The page the ⋮ menu opens over.</param>
-    /// <param name="inBar">Drawn into a navigation bar: no hairline, no padding of its own, and the title in the ink.</param>
-    public ScreenHeader(Color ink, Page dialogs, bool inBar)
+    /// <param name="inBar">Drawn into a navigation bar: no hairline and no padding of its own.</param>
+    /// <param name="titleInk">The title's colour where it differs from the buttons' (a bar whose buttons are tinted);
+    /// null: the buttons' in a bar, the theme's in the pane.</param>
+    public ScreenHeader(Color ink, Page dialogs, bool inBar, Color? titleInk = null)
     {
-        (_ink, _dialogs, InBar) = (ink, dialogs, inBar);
+        (_ink, _dialogs, InBar, _titleInk) = (ink, dialogs, inBar, titleInk);
         if (inBar)
         {
             _row.Padding = new Thickness(0);
@@ -69,7 +72,7 @@ internal sealed class ScreenHeader : ContentView
             LineBreakMode = LineBreakMode.TailTruncation,
             VerticalOptions = LayoutOptions.Center,
             Margin = new Thickness(back is null && !InBar ? 12 : 0, 0, 0, 0),
-            TextColor = InBar ? _ink : null,
+            TextColor = _titleInk ?? (InBar ? _ink : null),
         }, GridLength.Star);
 
         foreach (var action in actions.Where(a => !a.Secondary))

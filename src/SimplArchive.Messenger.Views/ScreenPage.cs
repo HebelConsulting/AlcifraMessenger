@@ -22,7 +22,7 @@ internal sealed class ScreenPage : ContentPage, IScreenHost
     public ScreenPage(MessengerScreens screens, Func<IScreenHost, ScreenView> build, ConversationsPage? list)
     {
         (_screens, Build, _list) = (screens, build, list);
-        _header = Header(Colors.White);
+        _header = Header(null);
         View = build(this);
         View.Changed += Draw;
         Draw();
@@ -48,6 +48,11 @@ internal sealed class ScreenPage : ContentPage, IScreenHost
         if (Parent is NavigationPage { BarTextColor: { } ink })
         {
             _header = Header(ink);
+            Draw();
+        }
+        else if (Parent is not null)
+        {
+            _header = Header(null);
             Draw();
         }
     }
@@ -103,9 +108,17 @@ internal sealed class ScreenPage : ContentPage, IScreenHost
 
     Task IScreenHost.ConversationsChangedAsync() => Task.CompletedTask;   // the list beneath reads itself when it is back
 
-    private ScreenHeader Header(Color ink)
+    // The bar's text colour where the host set one. Otherwise as the platform draws its bar: on Android words in white
+    // on the theme's dark bar; on iOS a light (or, in dark mode, dark) bar, whose title is in the label colour and whose
+    // buttons are tinted, here in the host's accent.
+    private ScreenHeader Header(Color? barText)
     {
-        var header = new ScreenHeader(ink, this, inBar: true) { HorizontalOptions = LayoutOptions.Fill };
+        var ios = DeviceInfo.Current.Platform == DevicePlatform.iOS || DeviceInfo.Current.Platform == DevicePlatform.MacCatalyst;
+        var label = Application.Current?.RequestedTheme == AppTheme.Dark ? Colors.White : Colors.Black;
+        var header = barText is { } ink
+            ? new ScreenHeader(ink, this, inBar: true)
+            : ios ? new ScreenHeader(_screens.Accent, this, inBar: true, titleInk: label) : new ScreenHeader(Colors.White, this, inBar: true);
+        header.HorizontalOptions = LayoutOptions.Fill;
         NavigationPage.SetTitleView(this, header);
         return header;
     }

@@ -69,7 +69,7 @@ internal sealed class ThreadView : ScreenView
         composeBar.Add(send, 2);
 
         var page = new Grid { RowDefinitions = [new(GridLength.Star), new(GridLength.Auto), new(GridLength.Auto)] };
-        page.Add(_list, 0, 0);
+        page.Add(PullToRefresh.Around(_list, LoadAsync), 0, 0);   // as its Refresh does
         page.Add(_replyBar, 0, 1);
         // Restored history (core #1813) is read, not continued: where the compose bar would be, it says so.
         page.Add(conversation.IsReadOnly ? HistoryBar(conversation) : composeBar, 0, 2);
