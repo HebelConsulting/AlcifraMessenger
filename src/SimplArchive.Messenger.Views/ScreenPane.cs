@@ -16,13 +16,14 @@ internal sealed class ScreenPane : ContentView
     private readonly ConversationsPage _shell;
     private readonly List<Entry> _stack = [];
     private readonly ContentView _body = new();
-    private readonly Grid _header = new() { Padding = new Thickness(4, 4, 4, 4), IsVisible = false };
+    private readonly ScreenHeader _header;
     private readonly View _placeholder;
     private bool _active;
 
     public ScreenPane(MessengerScreens screens, ConversationsPage shell)
     {
         (_screens, _shell) = (screens, shell);
+        _header = new ScreenHeader(screens.Accent, shell, inBar: false);
         _placeholder = new Label
         {
             Text = ViewText.Get("SelectConversation"),
@@ -33,10 +34,9 @@ internal sealed class ScreenPane : ContentView
             VerticalOptions = LayoutOptions.Center,
             Margin = 32,
         };
-        var grid = new Grid { RowDefinitions = [new(GridLength.Auto), new(GridLength.Auto), new(GridLength.Star)] };
+        var grid = new Grid { RowDefinitions = [new(GridLength.Auto), new(GridLength.Star)] };
         grid.Add(_header, 0, 0);
-        grid.Add(new BoxView { HeightRequest = 1, Color = Color.FromArgb("#1F000000") }, 0, 1);
-        grid.Add(_body, 0, 2);
+        grid.Add(_body, 0, 1);
         Content = grid;
         _body.Content = _placeholder;
     }
@@ -135,7 +135,7 @@ internal sealed class ScreenPane : ContentView
         _body.Content = null;
         if (_stack.Count == 0)
         {
-            _header.IsVisible = false;
+            _header.Hide();
             _body.Content = _placeholder;
             return;
         }
@@ -152,66 +152,14 @@ internal sealed class ScreenPane : ContentView
 
     private void DrawHeader()
     {
-        _header.Clear();
-        _header.ColumnDefinitions.Clear();
         if (_stack.Count == 0)
         {
-            _header.IsVisible = false;
+            _header.Hide();
             return;
         }
 
         var top = _stack[^1];
-        void Add(View view, GridLength width)
-        {
-            _header.ColumnDefinitions.Add(new ColumnDefinition(width));
-            _header.Add(view, _header.ColumnDefinitions.Count - 1);
-        }
-
-        if (_stack.Count > 1)
-        {
-            var back = HeaderButton("‹", () => top.BackAsync(), fontSize: 26);
-            SemanticProperties.SetDescription(back, ViewText.Get("Back"));
-            Add(back, GridLength.Auto);
-        }
-
-        Add(new Label
-        {
-            Text = top.View.Title,
-            FontSize = 17,
-            FontAttributes = FontAttributes.Bold,
-            LineBreakMode = LineBreakMode.TailTruncation,
-            VerticalOptions = LayoutOptions.Center,
-            Margin = new Thickness(_stack.Count > 1 ? 0 : 12, 0, 0, 0),
-        }, GridLength.Star);
-
-        // Touch has no hover: the actions are words, the secondary ones behind ⋮, as a page's overflow menu holds them.
-        foreach (var action in top.View.Actions.Where(a => !a.Secondary))
-        {
-            Add(HeaderButton(action.Text, action.Act), GridLength.Auto);
-        }
-
-        if (top.View.Actions.Where(a => a.Secondary).ToList() is { Count: > 0 } more)
-        {
-            var menu = HeaderButton("⋮", async () =>
-            {
-                var chosen = await _shell.DisplayActionSheetAsync(null, ViewText.Get("Cancel"), null, [.. more.Select(a => a.Text)]);
-                if (more.FirstOrDefault(a => a.Text == chosen) is { } action)
-                {
-                    await action.Act();
-                }
-            }, fontSize: 20);
-            SemanticProperties.SetDescription(menu, ViewText.Get("More"));
-            Add(menu, GridLength.Auto);
-        }
-
-        _header.IsVisible = true;
-    }
-
-    private Button HeaderButton(string text, Func<Task> act, double fontSize = 15)
-    {
-        var button = new Button { Text = text, BackgroundColor = Colors.Transparent, TextColor = _screens.Accent, FontSize = fontSize, Padding = new Thickness(8, 0) };
-        button.Clicked += async (_, _) => await act();
-        return button;
+        _header.Show(top.View.Title, top.View.Actions, _stack.Count > 1 ? top.BackAsync : null);
     }
 
     // One screen of the pane, and its host: what the screen says happened, the pane and the shell carry out — unless the

@@ -43,13 +43,9 @@ internal sealed class ConversationsView : ContentView
                 await _shell.OpenAsync(chosen);
             }
         };
-        var refresh = new RefreshView { Content = _list };
-        refresh.Command = new Command(async () =>
-        {
-            await LoadAsync();
-            refresh.IsRefreshing = false;
-        });
-        Content = new Grid { Children = { refresh, _empty } };
+        // The empty line sits over the list without taking its touches, so an empty list is pulled too.
+        _empty.InputTransparent = true;
+        Content = new Grid { Children = { PullToRefresh.Around(_list, LoadAsync), _empty } };
     }
 
     /// <summary>New chat and New group: in the toolbar of the page the list is on.</summary>

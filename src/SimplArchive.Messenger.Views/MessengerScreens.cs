@@ -58,9 +58,13 @@ public sealed class MessengerScreens(ChatSession session, Color accent, IFileHan
             return null;
         }
 
-        return split
-            ? [new ConversationsPage(this, split: true, conversation)]
-            : [Conversations(), new ScreenPage(this, Thread(conversation), resized: null)];
+        if (split)
+        {
+            return [new ConversationsPage(this, split: true, conversation)];
+        }
+
+        var conversations = new ConversationsPage(this, split: false);
+        return [conversations, new ScreenPage(this, Thread(conversation), conversations)];
     }
 
     internal ChatSession Session => session;

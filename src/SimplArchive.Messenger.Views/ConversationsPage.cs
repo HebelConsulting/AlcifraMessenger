@@ -29,6 +29,8 @@ internal sealed class ConversationsPage : ContentPage
     private bool _splits;
     private bool _inFront;
     private bool _moving;
+    private Guid? _visited;   // the conversation a page above showed last: marked for a moment when Back returns
+    private int _flash;
 
     /// <param name="screens">The Messenger's screens.</param>
     /// <param name="split">Whether the host offers the split here; without it the page is the phone's list at any width.</param>
@@ -115,6 +117,15 @@ internal sealed class ConversationsPage : ContentPage
     /// left the list. A new chat being chosen in the pane stays as it is.</summary>
     public void Listed(IReadOnlyList<Conversation> rows)
     {
+        if (_inFront && _visited is { } visited)
+        {
+            _visited = null;
+            if (MessagesSplit.ReturnMark(visited, rows, _splits) is { } back)
+            {
+                Flash(back);
+            }
+        }
+
         if (_selected is not { } id)
         {
             return;
@@ -145,11 +156,28 @@ internal sealed class ConversationsPage : ContentPage
         await _list.LoadAsync();
     }
 
+    /// <summary>A page above showed <paramref name="conversation"/>: on a phone the list marks it for a moment when Back
+    /// returns, so the eye finds its place.</summary>
+    public void Visited(Guid conversation) => _visited = conversation;
+
     /// <summary>Something the list shows changed (a thread in the pane was read): it is read again.</summary>
     public Task ReloadAsync() => _list.LoadAsync();
 
+    // The mark comes and goes by itself; a selection or another return meanwhile owns the mark from then on.
+    private async void Flash(Guid conversation)
+    {
+        var mine = ++_flash;
+        _list.Mark(conversation);
+        await Task.Delay(MessagesSplit.ReturnMarkFor);
+        if (mine == _flash && !_splits)
+        {
+            _list.Mark(null);
+        }
+    }
+
     private void Select(Conversation conversation)
     {
+        _flash++;
         _selected = conversation.Id;
         _list.Mark(conversation.Id);
         _pane.Show(_screens.Thread(conversation));
@@ -204,17 +232,18 @@ internal sealed class ConversationsPage : ContentPage
     {
         foreach (var build in builds)
         {
-            await Navigation.PushAsync(new ScreenPage(_screens, build, _split ? Resized : null), animated: builds.Count == 1);
+            await Navigation.PushAsync(new ScreenPage(_screens, build, this), animated: builds.Count == 1);
         }
     }
 
     // A page in front widened: when everything above this page is the Messenger's screens, they go back into the pane —
     // the bottom one selected where it is a thread — and the pages close. A photo or anything else in front stays.
-    private async void Resized(ScreenPage page)
+    /// <summary>A page this one pushed changed its size (a rotation, a tablet's split screen).</summary>
+    public async void Resized(ScreenPage page)
     {
         var stack = Navigation.NavigationStack;
         var at = stack.ToList().IndexOf(this);
-        if (_moving || at < 0 || !MessagesSplit.Splits(page.Width) || stack[^1] != page)
+        if (!_split || _moving || at < 0 || !MessagesSplit.Splits(page.Width) || stack[^1] != page)
         {
             return;
         }

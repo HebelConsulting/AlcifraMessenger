@@ -26,6 +26,17 @@ public static class MessagesSplit
     /// <summary>The list's column in a window <paramref name="width"/> points wide; the conversation takes the rest.</summary>
     public static double ListWidth(double width) => Math.Clamp(width / 3, ListMinimum, ListMaximum);
 
+    /// <summary>How long a phone's list marks the conversation Back returned from, so the eye finds its place.</summary>
+    public static readonly TimeSpan ReturnMarkFor = TimeSpan.FromSeconds(1.5);
+
+    /// <summary>
+    /// The conversation a list marks for a moment when Back returns to it from <paramref name="visited"/>: on a phone
+    /// only — beside a pane, the mark is the selection's and stays — and only while it is still listed (not once the
+    /// caller left it). Null: nothing to mark.
+    /// </summary>
+    public static Guid? ReturnMark(Guid? visited, IReadOnlyList<Conversation> rows, bool splits) =>
+        splits ? null : AfterReload(visited, rows)?.Id;
+
     /// <summary>
     /// The conversation in <paramref name="rows"/> that is <paramref name="selected"/> — its FRESH row, whose unread
     /// count and links are today's — or null when it left the list (the caller left it, or was removed). Never the row
