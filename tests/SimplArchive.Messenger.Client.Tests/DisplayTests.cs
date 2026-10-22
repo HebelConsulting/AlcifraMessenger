@@ -124,6 +124,25 @@ public sealed class DisplayTests
     }
 
     [Fact]
+    public void Each_file_of_a_message_is_its_own_line_and_an_older_single_file_message_still_has_its_line()
+    {
+        var chat = new Conversation { IsDirect = true, CounterpartName = "Tom", Members = [new Member { UserId = Tom, DisplayName = "Tom" }] };
+        var notes = new SentFile("walk-notes.txt", "text/plain");
+        var report = new SentFile("walk-report.pdf", "application/pdf");
+        var two = Opened(Tom, "Two files for the walk", MessageState.Readable) with { File = notes, Files = [notes, report] };
+        var older = Opened(Tom, string.Empty, MessageState.Readable) with { File = new SentFile("harbour.jpg", "image/jpeg") };
+        var text = Opened(Tom, "just text", MessageState.Readable);
+
+        var rows = ThreadRows.Build(chat, [two, older, text], Me);
+
+        // One line each — the bubble draws a label per line, since one truncating label shows only its first line.
+        Assert.Equal(["📎 walk-notes.txt", "📎 walk-report.pdf"], rows[0].FileLines);
+        Assert.Equal("Two files for the walk", rows[0].Text);
+        Assert.Equal(["📎 harbour.jpg"], rows[1].FileLines);
+        Assert.Empty(rows[2].FileLines);
+    }
+
+    [Fact]
     public void A_one_to_one_receipt_sits_beneath_my_latest_message_the_other_has_read()
     {
         var start = DateTimeOffset.UtcNow;

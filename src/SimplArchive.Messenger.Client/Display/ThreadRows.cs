@@ -15,6 +15,14 @@ public sealed record ThreadRow(
     /// <summary>Every file the message carries, in order, each opened on its own; empty for text alone.</summary>
     public IReadOnlyList<SentFile> Files { get; init; } = [];
 
+    /// <summary>
+    /// The bubble's file lines, one per file in order ("📎 name"); a message in the older format, with one file and no
+    /// list, has its one line. The bubble draws each as a label of its own: one label holding them all, joined by line
+    /// breaks, showed only the first file, because a truncating label is a single line (walked on Android, 2026-10-22).
+    /// </summary>
+    public IReadOnlyList<string> FileLines =>
+        Files.Count > 0 ? [.. Files.Select(f => $"📎 {f.Name}")] : File is { } one ? [$"📎 {one.Name}"] : [];
+
     /// <summary>The opened text, for an edit to start from; null when there is none to edit.</summary>
     public string? EditableText { get; init; }
 

@@ -653,10 +653,12 @@ internal sealed class ThreadView : ScreenView
         var quote = new Label { FontSize = 12, LineBreakMode = LineBreakMode.TailTruncation, MaxLines = 2 };
         var quoteBox = new Border { StrokeThickness = 0, Padding = new Thickness(8, 4), StrokeShape = new RoundRectangle { CornerRadius = 6 }, Content = quote };
         var text = new Label { FontSize = 16 };
-        var fileChip = new Label { FontSize = 15, FontAttributes = FontAttributes.Bold, LineBreakMode = LineBreakMode.MiddleTruncation };
+        // One label per file, each kept to one line with the name's middle cut, so the extension stays readable: a single
+        // label joined by line breaks showed only its first line, a truncating label being one line (ThreadRow.FileLines).
+        var fileChips = new VerticalStackLayout { Spacing = 2 };
         var footer = new Label { FontSize = 11, HorizontalTextAlignment = TextAlignment.End };
         var receipt = new Label { FontSize = 11, TextColor = Colors.Gray, HorizontalTextAlignment = TextAlignment.End, HorizontalOptions = LayoutOptions.End };
-        var body = new VerticalStackLayout { Spacing = 3, Children = { sender, quoteBox, fileChip, text, footer } };
+        var body = new VerticalStackLayout { Spacing = 3, Children = { sender, quoteBox, fileChips, text, footer } };
         var bubble = new Border
         {
             StrokeThickness = 0,
@@ -680,10 +682,18 @@ internal sealed class ThreadView : ScreenView
             text.TextColor = ink;
             text.Text = r.Text;
             text.IsVisible = r.File is null || r.Text.Length > 0;
-            fileChip.IsVisible = r.File is not null;
-            fileChip.TextColor = ink;
             // Each file the message carries on its own line, the caption beneath them.
-            fileChip.Text = r.Files.Count > 0 ? string.Join("\n", r.Files.Select(f => $"📎 {f.Name}")) : r.File is { } f ? $"📎 {f.Name}" : null;
+            fileChips.Children.Clear();
+            foreach (var line in r.FileLines)
+            {
+                fileChips.Children.Add(new Label
+                {
+                    Text = line, FontSize = 15, FontAttributes = FontAttributes.Bold, TextColor = ink,
+                    LineBreakMode = LineBreakMode.MiddleTruncation,
+                });
+            }
+
+            fileChips.IsVisible = fileChips.Children.Count > 0;
             text.FontAttributes = r.IsPlaceholder ? FontAttributes.Italic : FontAttributes.None;
             footer.TextColor = r.IsMine ? Colors.White.WithAlpha(0.8f) : Colors.Gray;
             footer.Text = r.Footer;
