@@ -19,6 +19,9 @@ internal sealed class FakeArchive : IModuleArchiveFacade
     public HashSet<(Guid Target, Guid Folder)> References { get; } = [];
     public HashSet<string> Uploads { get; } = [];
 
+    /// <summary>Which upload each filed document was made from: the object store keeps bytes by upload.</summary>
+    public Dictionary<Guid, string> FiledFrom { get; } = [];
+
     public Task<ModuleDocument?> GetDocumentAsync(Guid documentId, CancellationToken cancellationToken = default) =>
         Task.FromResult(Documents.GetValueOrDefault(documentId));
 
@@ -92,7 +95,9 @@ internal sealed class FakeArchive : IModuleArchiveFacade
             throw new ModuleUploadMissingException(uploadId);
         }
 
-        return CreateDocumentAsync(parentFolderId, maskId, name + extension, fields, cancellationToken);
+        var filed = CreateDocumentAsync(parentFolderId, maskId, name + extension, fields, cancellationToken);
+        FiledFrom[filed.Result] = uploadId;
+        return filed;
     }
 
     public Task CreateReferenceAsync(Guid targetDocumentId, Guid intoFolderId, CancellationToken cancellationToken = default)
@@ -152,4 +157,31 @@ internal sealed class FakeNotices : IModuleNotices
         Cleared.Add((recipientUserId, documentId));
         return Task.CompletedTask;
     }
+}
+
+/// <summary>The core's live hub, recorded: every event the module sent; set <see cref="Refuse"/> to have it refused.</summary>
+internal sealed class FakeLiveEvents : IModuleLiveEvents
+{
+    public List<ModuleLiveEvent> Sent { get; } = [];
+
+    public ModuleLiveEventRefusedException? Refuse { get; set; }
+
+    public Task<int> SendAsync(ModuleLiveEvent liveEvent, CancellationToken cancellationToken = default)
+    {
+        if (Refuse is { } refusal)
+        {
+            throw refusal;
+        }
+
+        Sent.Add(liveEvent);
+        return Task.FromResult(liveEvent.RecipientUserIds.Count);
+    }
+}
+
+/// <summary>A clock the test moves.</summary>
+internal sealed class FakeClock : TimeProvider
+{
+    public DateTimeOffset Now { get; set; } = new(2026, 10, 21, 12, 0, 0, TimeSpan.Zero);
+
+    public override DateTimeOffset GetUtcNow() => Now;
 }

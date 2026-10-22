@@ -7,7 +7,8 @@ namespace SimplArchive.Messenger.Views;
 
 /// <summary>
 /// One conversation: bubbles oldest first, a reply's quote inside its bubble, and the compose bar. Tapping a bubble offers
-/// what may be done with it; opening the thread marks it read. A page of its own on a phone, the right pane on a tablet.
+/// what may be done with it; opening the thread marks it read. Beneath the messages, who is typing (#26). A page of its
+/// own on a phone, the right pane on a tablet.
 /// </summary>
 internal sealed class ThreadView : ScreenView
 {
@@ -20,6 +21,16 @@ internal sealed class ThreadView : ScreenView
     private IReadOnlyList<ThreadRow> _rows = [];
     private readonly Label _replyingTo;
     private readonly Grid _replyBar;
+    private readonly Label _typingLine;
+    private readonly TypingSignal _typingSignal = new();   // when the compose field says "I am typing" and "I stopped"
+    private readonly TypingIndicator _typers;              // who else types here, each forgotten soon after their last event
+    private IDisposable? _typingEvents;
+    private IDispatcherTimer? _typingTimer;
+    private readonly ThreadAnchor _anchor = new();   // the newest at the bottom, unless the reader scrolled up to older ones
+    private readonly Button _newBelow;                // "New messages ↓", while something arrived below a reader scrolled up
+    private readonly ComposerDraft _draft = new();   // the files waiting as chips above the field, sent with the text as one
+    private ThreadRead? _nextRead;                    // why the next read happens, where the caller said (a send)
+    private bool _readOnce;
     private Conversation _conversation;
     private MessagePage? _page;
     private ThreadRow? _replyTo;
@@ -28,6 +39,7 @@ internal sealed class ThreadView : ScreenView
         : base(screens, host)
     {
         _conversation = conversation;
+        _typers = new TypingIndicator(screens.Session.Me);
         Title = ThreadRows.Title(conversation);
         List<ScreenAction> actions = [new(ViewText.Get("Refresh"), LoadAsync)];
         if (!conversation.IsDirect && !conversation.IsReadOnly)
@@ -42,9 +54,25 @@ internal sealed class ThreadView : ScreenView
         _list = new CollectionView
         {
             SelectionMode = SelectionMode.Single,
-            ItemsUpdatingScrollMode = ItemsUpdatingScrollMode.KeepLastItemInView,
+            // The anchor decides where the list goes (ThreadAnchor): set rows never move it by themselves.
+            ItemsUpdatingScrollMode = ItemsUpdatingScrollMode.KeepScrollOffset,
             ItemTemplate = new DataTemplate(() => Bubble(screens.Accent)),
         };
+        // Scrolling up toward older messages is the reader's; the keyboard shrinking the list is not, and leaves it anchored.
+        _list.Scrolled += (_, e) =>
+        {
+            _anchor.Scrolled(e.LastVisibleItemIndex, _rows.Count, byReader: e.VerticalDelta < 0);
+            _newBelow!.IsVisible = _anchor.OffersNew;
+        };
+        // The keyboard came or went, the field or the chips grew: a thread at the end keeps its last messages in view.
+        _list.SizeChanged += (_, _) => Scroll(_anchor.Resized());
+        _newBelow = new Button
+        {
+            Text = ViewText.Get("NewMessagesBelow"), FontSize = 13, CornerRadius = 16, Padding = new Thickness(14, 4),
+            BackgroundColor = screens.Accent, TextColor = Colors.White, IsVisible = false,
+            HorizontalOptions = LayoutOptions.Center, VerticalOptions = LayoutOptions.End, Margin = new Thickness(0, 0, 0, 8),
+        };
+        _newBelow.Clicked += (_, _) => Scroll(_anchor.JumpToEnd());
         _list.SelectionChanged += async (_, e) =>
         {
             if (e.CurrentSelection.FirstOrDefault() is ThreadRow row)
@@ -62,6 +90,11 @@ internal sealed class ThreadView : ScreenView
         _replyBar.Add(cancelReply, 1);
 
         _compose = new Entry { Placeholder = ViewText.Get("TypeMessage"), ReturnType = ReturnType.Send };
+        // "Is typing" (#26): a keystroke may start or refresh it, leaving the field stops it.
+        _compose.TextChanged += (_, e) => SignalTyping(_typingSignal.Typed(DateTimeOffset.UtcNow, !string.IsNullOrWhiteSpace(e.NewTextValue)));
+        _compose.Unfocused += (_, _) => SignalTyping(_typingSignal.Stopped());
+        // The keyboard is about to come: once the page has made room, the newest messages sit right above it.
+        _compose.Focused += (_, _) => Dispatcher.DispatchDelayed(TimeSpan.FromMilliseconds(350), () => Scroll(_anchor.Resized()));
         _compose.Completed += async (_, _) => await SendAsync();   // the keyboard's Send key: the same send, the same gate
         var send = _send = new Button { Text = ViewText.Get("Send"), BackgroundColor = screens.Accent, TextColor = Colors.White };
         send.Clicked += async (_, _) => await SendAsync();
@@ -74,11 +107,20 @@ internal sealed class ThreadView : ScreenView
         composeBar.Add(_compose, 1);
         composeBar.Add(send, 2);
 
-        var page = new Grid { RowDefinitions = [new(GridLength.Star), new(GridLength.Auto), new(GridLength.Auto)] };
+        _typingLine = new Label
+        {
+            FontSize = 12, FontAttributes = FontAttributes.Italic, TextColor = Colors.Gray, Padding = new Thickness(16, 2),
+            LineBreakMode = LineBreakMode.TailTruncation, IsVisible = false,
+        };
+
+        var page = new Grid { RowDefinitions = [new(GridLength.Star), new(GridLength.Auto), new(GridLength.Auto), new(GridLength.Auto), new(GridLength.Auto)] };
         page.Add(PullToRefresh.Around(_list, LoadAsync), 0, 0);   // as its Refresh does
-        page.Add(_replyBar, 0, 1);
+        page.Add(_newBelow, 0, 0);      // over the thread's bottom edge
+        page.Add(_typingLine, 0, 1);   // under the thread, above the compose bar: who is typing
+        page.Add(_replyBar, 0, 2);
+        page.Add(new DraftChips(_draft, screens.Accent), 0, 3);   // the files waiting to go with the next send
         // Restored history (core #1813) is read, not continued: where the compose bar would be, it says so.
-        page.Add(conversation.IsReadOnly ? HistoryBar(conversation) : composeBar, 0, 2);
+        page.Add(conversation.IsReadOnly ? HistoryBar(conversation) : composeBar, 0, 4);
         Content = page;
     }
 
@@ -90,6 +132,94 @@ internal sealed class ThreadView : ScreenView
 
     // An arrival in this conversation (or one the host cannot place) reads it again, as its pull-down does (#26).
     protected override (Guid Conversation, Func<Task> Read)? ReloadsOnArrival => (_conversation.Id, () => LoadAsync(ReadReason.Arrival, quiet: true));
+
+    // On show, the thread hears "is typing" for its conversation off the host's live connection and ticks once a second:
+    // the caller's idle stop, and the typers' expiry. Off show, it stops listening, tells the others the caller stopped,
+    // and forgets who typed — what it hears next time starts afresh.
+    protected override void Showing(bool showing)
+    {
+        if (showing)
+        {
+            _typingEvents ??= Screens.Live.Subscribe(HeardLive);
+            if (_typingTimer is null)
+            {
+                _typingTimer = Dispatcher.CreateTimer();
+                _typingTimer.Interval = TimeSpan.FromSeconds(1);
+                _typingTimer.Tick += (_, _) =>
+                {
+                    var now = DateTimeOffset.UtcNow;
+                    SignalTyping(_typingSignal.Tick(now));
+                    if (_typers.Expire(now))
+                    {
+                        ShowTypers();
+                    }
+                };
+                _typingTimer.Start();
+            }
+
+            return;
+        }
+
+        _typingEvents?.Dispose();
+        _typingEvents = null;
+        _typingTimer?.Stop();
+        _typingTimer = null;
+        SignalTyping(_typingSignal.Stopped());
+        _typers.Clear();
+        ShowTypers();
+    }
+
+    // Off the connection's thread: only this conversation's typing, drawn on the UI thread.
+    private void HeardLive(string name, string payload)
+    {
+        if (TypingEvent.Parse(name, payload) is not { } heard || heard.Conversation != _conversation.Id)
+        {
+            return;
+        }
+
+        Dispatcher.Dispatch(() =>
+        {
+            if (!IsClosed && TypingRule.Shows(_conversation) && _typers.Received(heard.User, heard.Typing, DateTimeOffset.UtcNow))
+            {
+                ShowTypers();
+            }
+        });
+    }
+
+    // "Anna is typing…" beneath the messages, or nothing; nothing at all where the caller's indicator is off (reciprocal).
+    private void ShowTypers()
+    {
+        if (!TypingRule.Shows(_conversation))
+        {
+            _typers.Clear();
+        }
+
+        var line = _typers.Line(_conversation);
+        _typingLine.Text = line;
+        _typingLine.IsVisible = line is not null;
+    }
+
+    // Tells the others, best effort: a typing state lost on the way is worth nothing a few seconds later anyway.
+    private void SignalTyping(TypingSend send)
+    {
+        if (send == TypingSend.Nothing || !TypingRule.Sends(_conversation))
+        {
+            return;
+        }
+
+        var conversation = _conversation;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Screens.Session.Api.TypingAsync(conversation, send == TypingSend.Start);
+            }
+            catch (Exception)
+            {
+                // Nobody asked to be told it failed: the next keystroke or refresh says it again.
+            }
+        });
+    }
 
     // Restored history says so; where every member is here it offers to continue (core #1813), in place of the compose bar.
     private View HistoryBar(Conversation conversation)
@@ -171,6 +301,7 @@ internal sealed class ThreadView : ScreenView
             }
 
             _conversation = conversation;
+            ShowTypers();   // the caller may have switched the indicator off meanwhile: then nobody's typing shows
             var (first, messages) = await session.MessagesAsync(_conversation);
             _page = first;
             var opened = new List<OpenedMessage>();
@@ -203,6 +334,9 @@ internal sealed class ThreadView : ScreenView
             }
 
             _list.ItemsSource = _rows = rows;
+            var why = _nextRead ?? (_readOnce ? ThreadRead.Reloaded : ThreadRead.Opened);
+            (_nextRead, _readOnce) = (null, true);
+            Scroll(_anchor.RowsSet(why, rows.Count > 0 ? rows[^1].Message.Id : null));
             if (opened.Count > 0 && opened[^1].State != MessageState.Locked)   // a sealed message is not read
             {
                 await session.Api.MarkReadAsync(_conversation, messages[^1].SentAt);
@@ -229,20 +363,36 @@ internal sealed class ThreadView : ScreenView
     // failed, the text stays there to be sent again — never sent twice by itself.
     private async Task SendAsync()
     {
-        var text = _compose.Text?.Trim();
-        if (string.IsNullOrEmpty(text) || _page is null || _sending.Sending)
+        var text = _compose.Text?.Trim() ?? string.Empty;
+        var what = _draft.What(text);
+        if (what == DraftSend.Nothing || _page is null || _sending.Sending)
         {
             return;
         }
 
+        SignalTyping(_typingSignal.Stopped());   // what was typed is on its way: no longer typing
+        var page = _page;
+        var replyTo = _replyTo?.Message.Id;
         var sent = false;
         try
         {
+            // ONE message: the chips' files with the text as their caption, or the text alone; the gate covers all of it.
             sent = await _sending.SendAsync(async () =>
             {
-                _list.ItemsSource = _rows.Append(ThreadRows.Sending(text, Screens.Session.Me)).ToList();
-                await Screens.Session.SendAsync(_conversation, _page, text, _replyTo?.Message.Id);
+                var shown = what == DraftSend.Files ? string.Join(" · ", _draft.Files.Select(f => $"📎 {f.File.Name}").Append(text).Where(t => t.Length > 0)) : text;
+                _list.ItemsSource = _rows.Append(ThreadRows.Sending(shown, Screens.Session.Me)).ToList();
+                Scroll(ThreadScroll.ToEnd);
+                if (what == DraftSend.Files)
+                {
+                    await Screens.Session.SendFilesAsync(_conversation, page, _draft.Outgoing, text, replyTo);
+                }
+                else
+                {
+                    await Screens.Session.SendAsync(_conversation, page, text, replyTo);
+                }
+
                 _compose.Text = string.Empty;
+                _draft.Clear();
                 Reply(null);
             });
         }
@@ -254,15 +404,34 @@ internal sealed class ThreadView : ScreenView
         }
         catch (Exception exception)
         {
-            _list.ItemsSource = _rows;   // not sent: the bubble on its way goes, the text is still in the field
+            _list.ItemsSource = _rows;   // not sent: the bubble on its way goes, the text and the chips are still there
             await ShowAsync(exception);
             return;
         }
 
         if (sent)
         {
+            _nextRead = ThreadRead.Sent;
             await LoadAsync();
         }
+    }
+
+    // Where the anchor says, once the list has laid out its rows.
+    private void Scroll(ThreadScroll scroll)
+    {
+        _newBelow.IsVisible = _anchor.OffersNew;
+        if (scroll != ThreadScroll.ToEnd)
+        {
+            return;
+        }
+
+        Dispatcher.Dispatch(() =>
+        {
+            if (_list.ItemsSource is System.Collections.IList { Count: > 0 } items)
+            {
+                _list.ScrollTo(items.Count - 1, position: ScrollToPosition.End, animate: false);
+            }
+        });
     }
 
     // While a message is on its way: Send and the attachment button disabled, the field read-only.
@@ -273,7 +442,8 @@ internal sealed class ThreadView : ScreenView
         _compose.IsReadOnly = sending;
     }
 
-    // A photo or a file, sealed to every member and sent with whatever is typed as its caption (core #1809).
+    // A photo or a file joins the draft as a chip (owner decision 2026-10-21); Send sends them all with the text as one
+    // message, each sealed to every member (core #1809).
     private async Task AttachAsync()
     {
         if (_page is null || _sending.Sending)
@@ -302,21 +472,9 @@ internal sealed class ThreadView : ScreenView
                 content = buffer.ToArray();
             }
 
-            if (content.LongLength > MaxFileBytes)
+            if (_draft.Add(new OutgoingFile(content, file.FileName, file.ContentType ?? "application/octet-stream")) is { } refused)
             {
-                await Host.Page.DisplayAlertAsync(ViewText.Get("Failed"), ViewText.Get("FileTooLarge"), ViewText.Get("OK"));
-                return;
-            }
-
-            var caption = _compose.Text?.Trim() ?? string.Empty;
-            if (!await _sending.SendAsync(async () =>
-            {
-                await Screens.Session.SendFileAsync(_conversation, _page, content, file.FileName,
-                    file.ContentType ?? "application/octet-stream", caption);
-                _compose.Text = string.Empty;
-            }))
-            {
-                return;   // a message went meanwhile: this one is not sent behind its back
+                await Host.Page.DisplayAlertAsync(ViewText.Get("Failed"), refused, ViewText.Get("OK"));
             }
         }
         catch (OperationCanceledException)
@@ -328,24 +486,20 @@ internal sealed class ThreadView : ScreenView
         {
             await ShowAsync(exception);
         }
-
-        await LoadAsync();
     }
-
-    // The server takes 100 MB; sealing adds a little, so the phone stops short of it.
-    private const long MaxFileBytes = 95L * 1024 * 1024;
 
     // Open opens it, with the key (one use per file), in the app wherever the app can show it (#27): a photo on its page, a
     // PDF or a plain text in the host's preview, a video or a sound in the player, from memory. What the app cannot show
     // gets a page that says so. Handing on is only ever the page's menu, after a warning, and only where the tenant lets
     // files leave the app.
-    private async Task OpenFileAsync(ThreadRow row)
+    private async Task OpenFileAsync(ThreadRow row, int index)
     {
         try
         {
-            var content = await Screens.Session.OpenFileAsync(row.Message);
-            var name = row.File!.Name;
-            var opening = FileOpening.Of(content, name, row.File.ContentType, _conversation.FilesStayInApp);
+            var file = row.Files.Count > index ? row.Files[index] : row.File!;
+            var content = await Screens.Session.OpenFileAsync(row.Message, index);
+            var name = file.Name;
+            var opening = FileOpening.Of(content, name, file.ContentType, _conversation.FilesStayInApp);
             var page = opening.ShownIn switch
             {
                 FileShownIn.Photo => new PhotoPage(content, name),
@@ -407,7 +561,20 @@ internal sealed class ThreadView : ScreenView
         {
             if (chosen == ViewText.Get("Open"))
             {
-                await OpenFileAsync(row);
+                // Several files: which one; each opens on its own, with the key, as a single file does.
+                var index = 0;
+                if (row.Files.Count > 1)
+                {
+                    var names = row.Files.Select((f, i) => $"{i + 1}. {f.Name}").ToArray();
+                    var which = await Host.Page.DisplayActionSheetAsync(ViewText.Get("OpenWhich"), ViewText.Get("Cancel"), null, names);
+                    index = Array.IndexOf(names, which);
+                    if (index < 0)
+                    {
+                        return;
+                    }
+                }
+
+                await OpenFileAsync(row, index);
                 return;
             }
 
@@ -486,10 +653,12 @@ internal sealed class ThreadView : ScreenView
         var quote = new Label { FontSize = 12, LineBreakMode = LineBreakMode.TailTruncation, MaxLines = 2 };
         var quoteBox = new Border { StrokeThickness = 0, Padding = new Thickness(8, 4), StrokeShape = new RoundRectangle { CornerRadius = 6 }, Content = quote };
         var text = new Label { FontSize = 16 };
-        var fileChip = new Label { FontSize = 15, FontAttributes = FontAttributes.Bold, LineBreakMode = LineBreakMode.MiddleTruncation };
+        // One label per file, each kept to one line with the name's middle cut, so the extension stays readable: a single
+        // label joined by line breaks showed only its first line, a truncating label being one line (ThreadRow.FileLines).
+        var fileChips = new VerticalStackLayout { Spacing = 2 };
         var footer = new Label { FontSize = 11, HorizontalTextAlignment = TextAlignment.End };
         var receipt = new Label { FontSize = 11, TextColor = Colors.Gray, HorizontalTextAlignment = TextAlignment.End, HorizontalOptions = LayoutOptions.End };
-        var body = new VerticalStackLayout { Spacing = 3, Children = { sender, quoteBox, fileChip, text, footer } };
+        var body = new VerticalStackLayout { Spacing = 3, Children = { sender, quoteBox, fileChips, text, footer } };
         var bubble = new Border
         {
             StrokeThickness = 0,
@@ -513,9 +682,18 @@ internal sealed class ThreadView : ScreenView
             text.TextColor = ink;
             text.Text = r.Text;
             text.IsVisible = r.File is null || r.Text.Length > 0;
-            fileChip.IsVisible = r.File is not null;
-            fileChip.TextColor = ink;
-            fileChip.Text = r.File is { } f ? $"📎 {f.Name}" : null;
+            // Each file the message carries on its own line, the caption beneath them.
+            fileChips.Children.Clear();
+            foreach (var line in r.FileLines)
+            {
+                fileChips.Children.Add(new Label
+                {
+                    Text = line, FontSize = 15, FontAttributes = FontAttributes.Bold, TextColor = ink,
+                    LineBreakMode = LineBreakMode.MiddleTruncation,
+                });
+            }
+
+            fileChips.IsVisible = fileChips.Children.Count > 0;
             text.FontAttributes = r.IsPlaceholder ? FontAttributes.Italic : FontAttributes.None;
             footer.TextColor = r.IsMine ? Colors.White.WithAlpha(0.8f) : Colors.Gray;
             footer.Text = r.Footer;

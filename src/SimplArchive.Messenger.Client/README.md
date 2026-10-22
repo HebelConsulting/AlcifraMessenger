@@ -18,7 +18,9 @@ The client side of the SimplArchive Messenger, free of any user interface:
   sender, quote, the "restored" mark, the receipt line), `MemberRows`, `MessagesSplit` (when a wide window shows the
   conversations beside the open one, and which one the pane keeps after the list is read again), `Arrivals` and
   `ReloadOnArrival` (which open screen a push reloads, and how pushes close together are read once), `SendGate` (one send
-  at a time), `KeyPrompt` (a cancelled key prompt is not asked again until the user asks), and `ViewText`, the
+  at a time), `KeyPrompt` (a cancelled key prompt is not asked again until the user asks), `TypingSignal` and `TypingIndicator` (when
+  the compose field says "is typing" and "stopped", how long a typer is shown, and the line for one, two or more;
+  `IMessengerLiveEvents` is the host's live connection they hear it on), and `ViewText`, the
   texts in English, German, Italian and Spanish. The phone's screens and the desktop's tab both draw from it.
 
 The format is specified in the repository's `docs/format.md`. Apache License 2.0.

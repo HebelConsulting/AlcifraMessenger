@@ -158,8 +158,14 @@ public sealed class Message : Resource
     /// <summary>The message this one replies to.</summary>
     public Guid? ReplyToId { get; set; }
 
-    /// <summary>The sealed file it carries, reached by the <c>attachment</c> link.</summary>
+    /// <summary>The sealed file it carries, reached by the <c>attachment</c> link: its first, where it carries several.</summary>
     public Guid? AttachmentDocumentId { get; set; }
+
+    /// <summary>
+    /// Every file it carries, in order, each with its <c>content</c> link; the first is <see cref="AttachmentDocumentId"/>.
+    /// Empty from a server that predates several files per message: then the attachment is the one file.
+    /// </summary>
+    public List<MessageFile> Files { get; set; } = [];
 
     /// <summary>The sealed text (format version 1).</summary>
     public byte[] Ciphertext { get; set; } = [];
@@ -169,6 +175,13 @@ public sealed class Message : Resource
 
     /// <summary>The tag an edit or a delete sends back as If-Match: what the caller saw.</summary>
     public string ETag { get; set; } = string.Empty;
+}
+
+/// <summary>One sealed file of a message, followed by its <c>content</c> link.</summary>
+public sealed class MessageFile : Resource
+{
+    /// <summary>The file's document in the conversation's folder.</summary>
+    public Guid DocumentId { get; set; }
 }
 
 /// <summary>People the caller may start a conversation with: users with an enrolled key.</summary>
@@ -240,7 +253,11 @@ public sealed record BackupMember(Guid UserId, string Email, string DisplayName)
 /// <summary>A message as a backup holds it, with the id and sender id its ciphertext is bound to.</summary>
 public sealed record BackupMessage(
     Guid Id, int Epoch, Guid SenderUserId, DateTimeOffset SentAt, DateTimeOffset? EditedAt, DateTimeOffset? DeletedAt,
-    Guid? ReplyToId, Guid? AttachmentDocumentId, byte[] Ciphertext);
+    Guid? ReplyToId, Guid? AttachmentDocumentId, byte[] Ciphertext)
+{
+    /// <summary>The further files after the first, in order, each filed in the restored conversation first.</summary>
+    public IReadOnlyList<Guid> FurtherDocumentIds { get; init; } = [];
+}
 
 /// <summary>Who a restored conversation's members are here, and whether it can continue as a live conversation.</summary>
 public sealed class Continuation : Resource
@@ -278,4 +295,20 @@ public sealed class ContinuationMember : Resource
 
     /// <summary>Their user id here; null when nobody matches.</summary>
     public Guid? UserId { get; set; }
+}
+
+/// <summary>
+/// The caller's own Messenger preferences (#26), read from the conversation list's <c>preferences</c> link and replaced
+/// whole with <see cref="MessengerApi.ReplacePreferencesAsync"/> under the tag read.
+/// </summary>
+public sealed class MessengerPreferences : Resource
+{
+    /// <summary>
+    /// The typing indicator, reciprocal: on, the others see when the caller types and the caller sees when they do; off,
+    /// neither. On unless the caller switched it off.
+    /// </summary>
+    public bool TypingIndicator { get; set; } = true;
+
+    /// <summary>The tag of this read: what a replacement sends as If-Match.</summary>
+    public string ETag { get; set; } = string.Empty;
 }

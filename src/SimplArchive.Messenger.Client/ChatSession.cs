@@ -29,9 +29,15 @@ public enum MessageState
 /// <summary>A message and what reading it gave.</summary>
 public sealed record OpenedMessage(Message Message, string? Text, MessageState State)
 {
-    /// <summary>The file it carries, by name and type, when it carries one and could be read.</summary>
+    /// <summary>The file it carries, by name and type, when it carries one and could be read: its first, of several.</summary>
     public SentFile? File { get; init; }
+
+    /// <summary>Every file it carries, in order, when it could be read (<see cref="File"/> is the first); empty for none.</summary>
+    public IReadOnlyList<SentFile> Files { get; init; } = [];
 }
+
+/// <summary>A file on its way into a message: its bytes, its name and its type, as the sender chose it.</summary>
+public sealed record OutgoingFile(byte[] Content, string Name, string ContentType);
 
 /// <summary>A file a message carries: what the message's sealed body says about it. Its bytes are opened on request.</summary>
 public sealed record SentFile(string Name, string ContentType);
@@ -112,10 +118,14 @@ public sealed class ChatSession(MessengerApi api, IConversationKeyOpener opener,
                 return new OpenedMessage(message, Encoding.UTF8.GetString(body), MessageState.Readable);
             }
 
-            // A message carrying a file seals its text with the file's name and type (format v1, docs/format.md).
+            // A message carrying files seals its text with their names and types (format v1, docs/format.md): the first's
+            // as `name`/`type`, which is all a client that knows one file per message reads, and every one in `files`.
             var withFile = JsonSerializer.Deserialize<FileBody>(body, BodyJson)
                 ?? throw new CryptographicException("A message carrying a file has no body.");
-            return new OpenedMessage(message, withFile.Text, MessageState.Readable) { File = new SentFile(withFile.Name, withFile.Type) };
+            List<SentFile> files = withFile.Files is { Count: > 0 } several
+                ? [.. several.Select(f => new SentFile(f.Name, f.Type))]
+                : [new SentFile(withFile.Name, withFile.Type)];
+            return new OpenedMessage(message, withFile.Text, MessageState.Readable) { File = files[0], Files = files };
         }
         catch (Exception exception) when (exception is CryptographicException or JsonException)
         {
@@ -163,6 +173,58 @@ public sealed class ChatSession(MessengerApi api, IConversationKeyOpener opener,
     /// <summary>The bytes of the file <paramref name="message"/> carries, opened with the member's key (one key use).</summary>
     public async Task<byte[]> OpenFileAsync(Message message, CancellationToken cancellationToken = default) =>
         await opener.OpenAsync(await api.DownloadFileAsync(message, cancellationToken), cancellationToken);
+
+    /// <summary>The bytes of the message's file at <paramref name="index"/> (0 is its first), opened with the member's key.</summary>
+    public async Task<byte[]> OpenFileAsync(Message message, int index, CancellationToken cancellationToken = default) =>
+        await opener.OpenAsync(await api.DownloadFileAsync(message, index, cancellationToken), cancellationToken);
+
+    /// <summary>
+    /// Sends <paramref name="files"/> and <paramref name="text"/> as ONE message (owner decision 2026-10-21): each file
+    /// sealed to every certificate of every member and uploaded, then one message that names them all, in order, and seals
+    /// their names and types with the text, its caption. A file that fails to upload sends nothing; the ones uploaded
+    /// before it stay unfiled in no message, as an interrupted single send leaves its file.
+    /// </summary>
+    public async Task<Message> SendFilesAsync(
+        Conversation conversation, MessagePage page, IReadOnlyList<OutgoingFile> files, string text = "", Guid? replyToId = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (files.Count == 0)
+        {
+            throw new ArgumentException("A message with files needs at least one.", nameof(files));
+        }
+
+        var current = conversation.NeedsNewEpoch ? await PublishNewEpochAsync(conversation, cancellationToken) : conversation;
+        var certificates = new List<X509Certificate2>();
+        try
+        {
+            foreach (var member in current.Members)
+            {
+                foreach (var pem in (await api.CertificatesAsync(member, cancellationToken)).CertificatesPem)
+                {
+                    certificates.Add(X509Certificate2.CreateFromPem(pem));
+                }
+            }
+
+            var filed = new List<Guid>();
+            foreach (var file in files)
+            {
+                filed.Add((await api.UploadFileAsync(current, ConversationKeys.SealTo(file.Content, certificates), cancellationToken)).DocumentId);
+            }
+
+            var id = Guid.NewGuid();
+            var body = JsonSerializer.SerializeToUtf8Bytes(FileBody.Of(text, files), BodyJson);
+            return await WithCurrentEpochAsync(current, async latest =>
+            {
+                var key = await Keys.KeyAsync(latest.Id, latest.Epoch, latest.MyKey, cancellationToken);
+                var sealedBody = MessageFormat.Seal(key, Context(latest, latest.Epoch, id, me), body);
+                return await api.SendAsync(page, id, latest.Epoch, sealedBody, replyToId, filed, cancellationToken);
+            }, cancellationToken);
+        }
+        finally
+        {
+            certificates.ForEach(c => c.Dispose());
+        }
+    }
 
     /// <summary>
     /// Seals and sends <paramref name="text"/>. If somebody left, the next epoch is published first; if the epoch moved on
@@ -344,8 +406,33 @@ public sealed class ChatSession(MessengerApi api, IConversationKeyOpener opener,
 
     private static readonly JsonSerializerOptions BodyJson = new(JsonSerializerDefaults.Web);
 
-    /// <summary>A message's body when it carries a file: its text, and the file's name and type.</summary>
-    private sealed record FileBody(string Text, string Name, string Type);
+    /// <summary>
+    /// A message's body when it carries files: its text, the first file's name and type — all a client that knows one file
+    /// per message reads — and, with several, every file's in <see cref="Files"/>.
+    /// </summary>
+    internal sealed record FileBody(string Text, string Name, string Type)
+    {
+        /// <summary>Every file, in order; null for a one-file message, so its body stays exactly what it always was.</summary>
+        [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        public List<FileName>? Files { get; init; }
+
+        /// <summary>The body for <paramref name="files"/> with <paramref name="text"/> as their caption.</summary>
+        public static FileBody Of(string text, IReadOnlyList<OutgoingFile> files) =>
+            new(text, files[0].Name, files[0].ContentType)
+            {
+                Files = files.Count > 1 ? [.. files.Select(f => new FileName(f.Name, f.ContentType))] : null,
+            };
+    }
+
+    /// <summary>One file's name and type inside a body.</summary>
+    internal sealed record FileName(string Name, string Type);
+
+    /// <summary>The body bytes as sealed: for the wire tests.</summary>
+    internal static byte[] BodyBytes(FileBody body) => JsonSerializer.SerializeToUtf8Bytes(body, BodyJson);
+
+    /// <summary>A body as an older client reads it (only text, name and type): for the wire tests.</summary>
+    internal static (string Text, string Name, string Type) ReadAsOneFile(byte[] body) =>
+        JsonSerializer.Deserialize<FileBody>(body, BodyJson) is { } b ? (b.Text, b.Name, b.Type) : default;
 
     private static MessageContext Context(Conversation conversation, int epoch, Guid messageId, Guid sender) =>
         new(conversation.SealedUnder, epoch, messageId, sender);

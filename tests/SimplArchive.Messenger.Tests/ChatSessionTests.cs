@@ -96,6 +96,79 @@ public sealed class ChatSessionTests : IAsyncDisposable
         Assert.Equal(photo, await toms.OpenFileAsync(opened.Message));   // sealed to Tom's certificate, opened with his key
     }
 
+    // The composer's chips (owner decision 2026-10-21): several files and the caption are ONE message, each file sealed to
+    // every member; a client that knows one file per message still reads the first file and the caption.
+    [Fact]
+    public async Task Several_files_and_a_caption_are_one_message_and_an_older_client_still_reads_the_first()
+    {
+        var (anna, tom) = (Person("Anna"), Person("Tom"));
+        await _rig.StartAsync();
+        _rig.Caller.UserId = anna;
+        await _rig.Api.DiscoverAsync();
+        var annas = SessionOf(anna);
+        var chat = await annas.StartDirectAsync(await _rig.Api.ConversationsAsync(), Assert.Single((await _rig.Api.PeopleAsync("tom")).Items));
+        var (page, _) = await annas.MessagesAsync(chat);
+        var (photo, plan, notes) = (RandomNumberGenerator.GetBytes(2048), RandomNumberGenerator.GetBytes(3000), "minutes"u8.ToArray());
+
+        await annas.SendFilesAsync(chat, page,
+            [new(photo, "harbour.jpg", "image/jpeg"), new(plan, "plan.pdf", "application/pdf"), new(notes, "notes.txt", "text/plain")],
+            "From Saturday");
+
+        var forTom = await AsAsync(tom, chat);
+        var toms = SessionOf(tom);
+        var (_, messages) = await toms.MessagesAsync(forTom);
+        var message = Assert.Single(messages);   // one message, not three
+        var opened = await toms.OpenAsync(forTom, message);
+        Assert.Equal("From Saturday", opened.Text);
+        Assert.Equal(["harbour.jpg", "plan.pdf", "notes.txt"], opened.Files.Select(f => f.Name));
+        Assert.Equal(opened.Files[0], opened.File);
+        Assert.Equal(photo, await toms.OpenFileAsync(message, 0));
+        Assert.Equal(plan, await toms.OpenFileAsync(message, 1));
+        Assert.Equal(notes, await toms.OpenFileAsync(message, 2));
+
+        // An older client: the attachment link and the body's name/type only — the first file and the caption.
+        Assert.Equal(photo, await toms.OpenFileAsync(message));
+        var key = await toms.Keys.KeyAsync(forTom.Id, message.Epoch, forTom.MyKey);
+        var body = MessageFormat.Open(key, new MessageContext(forTom.SealedUnder, message.Epoch, message.Id, message.SenderUserId), message.Ciphertext);
+        var asBefore = System.Text.Json.JsonSerializer.Deserialize<OneFileBody>(body, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))!;
+        Assert.Equal(new OneFileBody("From Saturday", "harbour.jpg", "image/jpeg"), asBefore);
+
+        // Deleted for everyone, every file goes with it.
+        _rig.Caller.UserId = anna;
+        var (_, mine) = await annas.MessagesAsync(chat);
+        var documents = Assert.Single(mine).Files.Select(f => f.DocumentId).ToList();
+        Assert.Equal(3, documents.Count);
+        await _rig.Api.DeleteForEveryoneAsync(Assert.Single(mine));
+        Assert.All(documents, d => Assert.False(_rig.Archive.Documents.ContainsKey(d)));
+    }
+
+    [Fact]
+    public async Task A_file_without_a_caption_stays_one_file_message_in_the_old_body_shape()
+    {
+        var (anna, tom) = (Person("Anna"), Person("Tom"));
+        await _rig.StartAsync();
+        _rig.Caller.UserId = anna;
+        await _rig.Api.DiscoverAsync();
+        var annas = SessionOf(anna);
+        var chat = await annas.StartDirectAsync(await _rig.Api.ConversationsAsync(), Assert.Single((await _rig.Api.PeopleAsync("tom")).Items));
+        var (page, _) = await annas.MessagesAsync(chat);
+
+        await annas.SendFilesAsync(chat, page, [new([1, 2, 3], "a.bin", "application/octet-stream")]);
+
+        var forTom = await AsAsync(tom, chat);
+        var toms = SessionOf(tom);
+        var message = Assert.Single((await toms.MessagesAsync(forTom)).Messages);
+        var key = await toms.Keys.KeyAsync(forTom.Id, message.Epoch, forTom.MyKey);
+        var body = System.Text.Encoding.UTF8.GetString(MessageFormat.Open(key,
+            new MessageContext(forTom.SealedUnder, message.Epoch, message.Id, message.SenderUserId), message.Ciphertext));
+        Assert.Equal("{\"text\":\"\",\"name\":\"a.bin\",\"type\":\"application/octet-stream\"}", body);   // no `files` for one
+        var opened = await toms.OpenAsync(forTom, message);
+        Assert.Equal((string.Empty, "a.bin"), (opened.Text, Assert.Single(opened.Files).Name));
+    }
+
+    // The body as a client that knows one file per message declares it.
+    private sealed record OneFileBody(string Text, string Name, string Type);
+
     [Fact]
     public async Task After_somebody_leaves_the_next_message_rekeys_by_itself_and_the_leaver_reads_nothing_new()
     {

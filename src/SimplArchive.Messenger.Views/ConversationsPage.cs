@@ -32,6 +32,8 @@ internal sealed class ConversationsPage : ContentPage
     private Guid? _visited;   // the conversation a page above showed last: marked for a moment when Back returns
     private int _flash;
     private IDisposable? _arrivals;   // while in front: an arrival reads the list again (#26)
+    private readonly ToolbarItem _preferences;   // the caller's own settings, in the menu while the server offers them
+    private ConversationList? _preferencesFrom;
 
     /// <param name="screens">The Messenger's screens.</param>
     /// <param name="split">Whether the host offers the split here; without it the page is the phone's list at any width.</param>
@@ -47,6 +49,19 @@ internal sealed class ConversationsPage : ContentPage
         {
             ToolbarItems.Add(new ToolbarItem { Text = action.Text, Command = new Command(async () => await action.Act()) });
         }
+
+        _preferences = new ToolbarItem
+        {
+            Text = ViewText.Get("Preferences"),
+            Order = ToolbarItemOrder.Secondary,
+            Command = new Command(async () =>
+            {
+                if (_preferencesFrom is { } from)
+                {
+                    await Navigation.PushAsync(new PreferencesPage(_screens, from));
+                }
+            }),
+        };
 
         _pane = new ScreenPane(screens, this) { IsVisible = false };
         _divider = new BoxView { Color = screens.Accent.WithAlpha(0.2f), IsVisible = false };
@@ -143,6 +158,24 @@ internal sealed class ConversationsPage : ContentPage
         else
         {
             _list.Mark(id);
+        }
+    }
+
+    /// <summary>
+    /// The list was read: <paramref name="list"/> offers the caller's own settings (#26), or null when it does not (a
+    /// module that predates them) — then the menu has no entry for them.
+    /// </summary>
+    public void PreferencesOffered(ConversationList? list)
+    {
+        _preferencesFrom = list;
+        var shown = ToolbarItems.Contains(_preferences);
+        if (list is not null && !shown)
+        {
+            ToolbarItems.Add(_preferences);
+        }
+        else if (list is null && shown)
+        {
+            ToolbarItems.Remove(_preferences);
         }
     }
 

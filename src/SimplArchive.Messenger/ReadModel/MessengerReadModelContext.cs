@@ -18,6 +18,8 @@ public sealed class MessengerReadModelContext(DbContextOptions options) : Module
     public DbSet<ReadReceipt> ReadReceipts => Set<ReadReceipt>();
     public DbSet<RestoredConversation> RestoredConversations => Set<RestoredConversation>();
     public DbSet<OriginMember> OriginMembers => Set<OriginMember>();
+    public DbSet<UserPreferences> UserPreferences => Set<UserPreferences>();
+    public DbSet<MessageFile> MessageFiles => Set<MessageFile>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -62,6 +64,15 @@ public sealed class MessengerReadModelContext(DbContextOptions options) : Module
         origin.HasIndex(o => o.TenantId);
         origin.Property(o => o.Email).HasMaxLength(320).IsRequired();
         origin.Property(o => o.DisplayName).HasMaxLength(200).IsRequired();
+
+        var preferences = modelBuilder.Entity<UserPreferences>().ToTable("msg_user_preferences");
+        preferences.HasKey(p => new { p.TenantId, p.UserId });
+        preferences.Property(p => p.ConcurrencyToken).IsConcurrencyToken();
+
+        var files = modelBuilder.Entity<MessageFile>().ToTable("msg_message_files");
+        files.HasKey(f => new { f.MessageId, f.Position });
+        files.HasIndex(f => f.DocumentId).IsUnique();
+        files.HasIndex(f => f.TenantId);
     }
 }
 

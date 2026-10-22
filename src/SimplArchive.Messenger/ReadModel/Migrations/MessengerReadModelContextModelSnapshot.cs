@@ -171,6 +171,30 @@ namespace SimplArchive.Messenger.ReadModel.Migrations
                     b.ToTable("msg_messages", (string)null);
                 });
 
+            modelBuilder.Entity("SimplArchive.Messenger.ReadModel.MessageFile", b =>
+                {
+                    b.Property<Guid>("MessageId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("DocumentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("MessageId", "Position");
+
+                    b.HasIndex("DocumentId")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId");
+
+                    b.ToTable("msg_message_files", (string)null);
+                });
+
             modelBuilder.Entity("SimplArchive.Messenger.ReadModel.OriginMember", b =>
                 {
                     b.Property<Guid>("ConversationId")
@@ -257,6 +281,26 @@ namespace SimplArchive.Messenger.ReadModel.Migrations
                         .IsUnique();
 
                     b.ToTable("msg_restored_conversations", (string)null);
+                });
+
+            modelBuilder.Entity("SimplArchive.Messenger.ReadModel.UserPreferences", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ConcurrencyToken")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("TypingIndicator")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("TenantId", "UserId");
+
+                    b.ToTable("msg_user_preferences", (string)null);
                 });
 #pragma warning restore 612, 618
         }

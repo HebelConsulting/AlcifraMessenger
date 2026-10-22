@@ -154,14 +154,14 @@ public sealed class ConversationTests : IDisposable
         var view = await _conversations.MemberViewAsync(id, default);
         Assert.True(view.NeedsNewEpoch);
         Assert.Equal(new[] { _anna, _tom }.Order(), view.Members.Order());
-        var refused = await Assert.ThrowsAsync<ModuleApiException>(() => _messages.SendAsync(id, Guid.NewGuid(), 1, [9], null, null, default));
+        var refused = await Assert.ThrowsAsync<ModuleApiException>(() => _messages.SendAsync(id, Guid.NewGuid(), 1, [9], null, [], default));
         Assert.Equal("MESSENGER_REKEY_NEEDED", refused.ErrorCode);
 
         await Assert.ThrowsAsync<ModuleApiException>(() => _conversations.PublishEpochAsync(id, [Key(_tom)], default));   // a key for everyone
         await _conversations.PublishEpochAsync(id, [Key(_anna), Key(_tom)], default);
         view = await _conversations.MemberViewAsync(id, default);
         Assert.Equal((2, false), (view.Epoch, view.NeedsNewEpoch));
-        await _messages.SendAsync(id, Guid.NewGuid(), 2, [9], null, null, default);
+        await _messages.SendAsync(id, Guid.NewGuid(), 2, [9], null, [], default);
 
         var open = await Assert.ThrowsAsync<ModuleApiException>(() => _conversations.PublishEpochAsync(id, [Key(_anna), Key(_tom)], default));
         Assert.Equal("MESSENGER_EPOCH_OPEN", open.ErrorCode);
@@ -173,7 +173,7 @@ public sealed class ConversationTests : IDisposable
         As(_anna);
         var id = await _conversations.CreateGroupAsync("Team", [Key(_anna), Key(_tom)], default);
         await _conversations.RemoveMemberAsync(id, _tom, [Key(_anna)], default);   // now at epoch 2
-        await _messages.SendAsync(id, Guid.NewGuid(), 2, [1], null, null, default);
+        await _messages.SendAsync(id, Guid.NewGuid(), 2, [1], null, [], default);
         await Assert.ThrowsAsync<ModuleApiException>(() => _conversations.AddMemberAsync(id, _eve, [Key(_eve)], default));   // a key for everyone
         await _conversations.AddMemberAsync(id, _eve, [Key(_anna), Key(_eve)], default);
 
@@ -188,8 +188,8 @@ public sealed class ConversationTests : IDisposable
     {
         As(_anna);
         var id = await _conversations.CreateGroupAsync("Team", [Key(_anna), Key(_tom)], default);
-        await Assert.ThrowsAsync<ModuleApiException>(() => _messages.SendAsync(id, Guid.NewGuid(), 2, [9], null, null, default));   // stale epoch
-        var sent = await _messages.SendAsync(id, Guid.NewGuid(), 1, [9], null, null, default);
+        await Assert.ThrowsAsync<ModuleApiException>(() => _messages.SendAsync(id, Guid.NewGuid(), 2, [9], null, [], default));   // stale epoch
+        var sent = await _messages.SendAsync(id, Guid.NewGuid(), 1, [9], null, [], default);
         var tag = sent.ConcurrencyToken;
 
         As(_tom);
@@ -210,8 +210,8 @@ public sealed class ConversationTests : IDisposable
     {
         As(_anna);
         var id = await _conversations.CreateGroupAsync("Team", [Key(_anna), Key(_tom)], default);
-        var first = await _messages.SendAsync(id, Guid.NewGuid(), 1, [1], null, null, default);
-        await _messages.SendAsync(id, Guid.NewGuid(), 1, [2], null, null, default);
+        var first = await _messages.SendAsync(id, Guid.NewGuid(), 1, [1], null, [], default);
+        await _messages.SendAsync(id, Guid.NewGuid(), 1, [2], null, [], default);
 
         As(_tom);
         Assert.Equal(2, (await _conversations.MemberViewAsync(id, default)).Unread);
@@ -230,7 +230,7 @@ public sealed class ConversationTests : IDisposable
     {
         As(_anna);
         var id = await _conversations.CreateGroupAsync("Team", [Key(_anna), Key(_tom), Key(_eve)], default);
-        await _messages.SendAsync(id, Guid.NewGuid(), 1, [9], null, null, default);
+        await _messages.SendAsync(id, Guid.NewGuid(), 1, [9], null, [], default);
 
         Assert.Equal(new[] { _tom, _eve }.Order(), _notices.Signals.Select(s => s.RecipientUserId).Order());
         Assert.All(_notices.Signals, s => Assert.Equal((id, "New messages", "Messenger"), (s.DocumentId, s.Title, s.Body)));
@@ -256,7 +256,7 @@ public sealed class ConversationTests : IDisposable
         Assert.Contains((file, tomsFolder), _archive.References);
         Assert.NotNull(await _files.DownloadAsync(chat, file, default));
 
-        var message = await _messages.SendAsync(chat, Guid.NewGuid(), 1, [1], null, file, default);
+        var message = await _messages.SendAsync(chat, Guid.NewGuid(), 1, [1], null, [file], default);
 
         As(_tom);   // delete for me: only Tom's reference goes
         await _messages.HideForMeAsync(chat, message.Id, default);
@@ -278,6 +278,6 @@ public sealed class ConversationTests : IDisposable
         var upload = await _files.BeginAsync(other, default);
         var foreign = await _files.CompleteAsync(other, upload.UploadId, default);
 
-        await Assert.ThrowsAsync<ModuleApiException>(() => _messages.SendAsync(team, Guid.NewGuid(), 1, [1], null, foreign, default));
+        await Assert.ThrowsAsync<ModuleApiException>(() => _messages.SendAsync(team, Guid.NewGuid(), 1, [1], null, [foreign], default));
     }
 }

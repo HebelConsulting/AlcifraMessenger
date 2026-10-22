@@ -30,7 +30,11 @@ public sealed class Restores(
     /// <summary>One message as it was stored, with its original id and sender id: what its ciphertext is bound to.</summary>
     public sealed record ImportedMessage(
         Guid Id, int Epoch, Guid SenderUserId, DateTimeOffset SentAt, DateTimeOffset? EditedAt, DateTimeOffset? DeletedAt,
-        Guid? ReplyToId, Guid? AttachmentDocumentId, byte[] Ciphertext);
+        Guid? ReplyToId, Guid? AttachmentDocumentId, byte[] Ciphertext)
+    {
+        /// <summary>The further files after the first, in order (several files and a caption are one message).</summary>
+        public IReadOnlyList<Guid> FurtherDocumentIds { get; init; } = [];
+    }
 
     /// <summary>
     /// Creates the restored conversation, or joins the one another member restored already: the restorer's keys and the
@@ -114,9 +118,17 @@ public sealed class Restores(
                 throw MessengerErrors.Invalid($"Message {message.Id} names a sender or an epoch this backup does not hold, or carries nothing.");
             }
 
-            if (message.AttachmentDocumentId is { } file && !await files.BelongsAsync(conversationId, file, cancellationToken))
+            if (message.AttachmentDocumentId is null && message.FurtherDocumentIds.Count > 0)
             {
-                throw MessengerErrors.Invalid("The attachment is not a file of this conversation.");
+                throw MessengerErrors.Invalid($"Message {message.Id} names further files but no first one.");
+            }
+
+            foreach (var file in message.AttachmentDocumentId is { } first ? message.FurtherDocumentIds.Prepend(first) : [])
+            {
+                if (!await files.BelongsAsync(conversationId, file, cancellationToken))
+                {
+                    throw MessengerErrors.Invalid("The attachment is not a file of this conversation.");
+                }
             }
         }
 
@@ -141,6 +153,13 @@ public sealed class Restores(
                 ConcurrencyToken = Guid.NewGuid(),
                 RestoredByUserId = conversations.Me,
             });
+            for (var position = 1; position <= m.FurtherDocumentIds.Count; position++)
+            {
+                db.MessageFiles.Add(new MessageFile
+                {
+                    MessageId = m.Id, Position = position, TenantId = caller.TenantId, DocumentId = m.FurtherDocumentIds[position - 1],
+                });
+            }
         }
 
         await db.SaveChangesAsync(cancellationToken);

@@ -17,6 +17,9 @@ public sealed class Messages(
 
     public const string SignalBody = "Messenger";
 
+    /// <summary>The most files one message carries (owner decision 2026-10-21: the composer's chips are one message).</summary>
+    public const int MaxFiles = 10;
+
     /// <summary>A page of messages, oldest first, after <paramref name="after"/> (exclusive); hidden-for-me left out.</summary>
     public async Task<(Conversations.View View, IReadOnlyList<Message> Page)> PageAsync(Guid conversationId, Guid? after, int limit, CancellationToken cancellationToken)
     {
@@ -38,9 +41,26 @@ public sealed class Messages(
         return (view, [.. all.Skip(start).Take(Math.Clamp(limit, 1, 200))]);
     }
 
-    /// <summary>Posts a message the client sealed under the current epoch, with the id it bound into the ciphertext.</summary>
+    /// <summary>
+    /// Every file each of <paramref name="messages"/> carries, in order: its first (<see cref="Message.AttachmentDocumentId"/>)
+    /// and the further ones; a message without files is absent.
+    /// </summary>
+    public async Task<IReadOnlyDictionary<Guid, IReadOnlyList<Guid>>> FilesOfAsync(IReadOnlyCollection<Message> messages, CancellationToken cancellationToken)
+    {
+        var ids = messages.Where(m => m.AttachmentDocumentId is not null).Select(m => m.Id).ToList();
+        var further = ids.Count == 0 ? [] : await db.MessageFiles.AsNoTracking().Where(f => ids.Contains(f.MessageId)).ToListAsync(cancellationToken);
+        return messages.Where(m => m.AttachmentDocumentId is not null).ToDictionary(
+            m => m.Id,
+            m => (IReadOnlyList<Guid>)[m.AttachmentDocumentId!.Value, .. further.Where(f => f.MessageId == m.Id).OrderBy(f => f.Position).Select(f => f.DocumentId)]);
+    }
+
+    /// <summary>
+    /// Posts a message the client sealed under the current epoch, with the id it bound into the ciphertext, and the files
+    /// it carries in order (none, one, or up to <see cref="MaxFiles"/>): the first is the message's attachment, as a client
+    /// that knows one file per message reads it; the others are further files.
+    /// </summary>
     public async Task<Message> SendAsync(
-        Guid conversationId, Guid messageId, int epoch, byte[] ciphertext, Guid? replyToId, Guid? attachmentDocumentId,
+        Guid conversationId, Guid messageId, int epoch, byte[] ciphertext, Guid? replyToId, IReadOnlyList<Guid> attachmentDocumentIds,
         CancellationToken cancellationToken)
     {
         var view = await conversations.WritableViewAsync(conversationId, cancellationToken);
@@ -64,11 +84,8 @@ public sealed class Messages(
             throw MessengerErrors.MessageExists();
         }
 
-        // A message may carry only a file of its own conversation, never somebody else's document.
-        if (attachmentDocumentId is { } file && !await files.BelongsAsync(conversationId, file, cancellationToken))
-        {
-            throw MessengerErrors.Invalid("The attachment is not a file of this conversation.");
-        }
+        await RequireFilesAsync(conversationId, attachmentDocumentIds, cancellationToken);
+        Guid? attachmentDocumentId = attachmentDocumentIds.Count > 0 ? attachmentDocumentIds[0] : null;
 
         var message = new Message
         {
@@ -84,10 +101,48 @@ public sealed class Messages(
             ConcurrencyToken = Guid.NewGuid(),
         };
         db.Messages.Add(message);
+        for (var position = 1; position < attachmentDocumentIds.Count; position++)
+        {
+            db.MessageFiles.Add(new MessageFile
+            {
+                MessageId = messageId, Position = position, TenantId = message.TenantId, DocumentId = attachmentDocumentIds[position],
+            });
+        }
+
         await db.SaveChangesAsync(cancellationToken);
         await SignalOthersAsync(view, cancellationToken);
         return message;
     }
+
+    // A message carries only files of its own conversation, never somebody else's document, each once, and none another
+    // message carries already.
+    internal async Task RequireFilesAsync(Guid conversationId, IReadOnlyList<Guid> documentIds, CancellationToken cancellationToken)
+    {
+        if (documentIds.Count > MaxFiles || documentIds.Distinct().Count() != documentIds.Count)
+        {
+            throw MessengerErrors.Invalid($"A message carries at most {MaxFiles} files, each once.");
+        }
+
+        foreach (var file in documentIds)
+        {
+            if (!await files.BelongsAsync(conversationId, file, cancellationToken))
+            {
+                throw MessengerErrors.Invalid("The attachment is not a file of this conversation.");
+            }
+        }
+
+        if (documentIds.Count > 0
+            && (await db.Messages.AnyAsync(m => m.AttachmentDocumentId != null && documentIds.Contains(m.AttachmentDocumentId.Value), cancellationToken)
+                || await db.MessageFiles.AnyAsync(f => documentIds.Contains(f.DocumentId), cancellationToken)))
+        {
+            throw MessengerErrors.Invalid("A file is carried by one message only.");
+        }
+    }
+
+    // Every file the message carries: its first, then the further ones.
+    private async Task<List<Guid>> AllFilesAsync(Message message, CancellationToken cancellationToken) =>
+        message.AttachmentDocumentId is not { } first ? []
+            : [first, .. await db.MessageFiles.Where(f => f.MessageId == message.Id).OrderBy(f => f.Position).Select(f => f.DocumentId).ToListAsync(cancellationToken)];
 
     // After the message is stored: a signal that fails must not make a sent message look unsent, so it is logged, not
     // thrown. The core folds repeats into the member's unread signal, so a burst pushes their phone once.
@@ -129,12 +184,13 @@ public sealed class Messages(
     public async Task DeleteForEveryoneAsync(Guid conversationId, Guid messageId, Guid? ifMatch, CancellationToken cancellationToken)
     {
         var (message, _) = await OwnAsync(conversationId, messageId, ifMatch, cancellationToken);
-        var attachment = message.AttachmentDocumentId;
+        var carried = await AllFilesAsync(message, cancellationToken);
         (message.Ciphertext, message.DeletedAt, message.ConcurrencyToken, message.AttachmentDocumentId) = ([], DateTimeOffset.UtcNow, Guid.NewGuid(), null);
+        db.MessageFiles.RemoveRange(db.MessageFiles.Where(f => f.MessageId == message.Id));
         await SaveTrackedAsync(cancellationToken);
-        if (attachment is { } file)
+        foreach (var file in carried)
         {
-            await files.DeleteForEveryoneAsync(file, cancellationToken);   // the file goes with its message, references too
+            await files.DeleteForEveryoneAsync(file, cancellationToken);   // the files go with their message, references too
         }
     }
 
@@ -149,9 +205,9 @@ public sealed class Messages(
         {
             db.HiddenMessages.Add(new HiddenMessage { TenantId = message.TenantId, MessageId = messageId, UserId = me });
             await db.SaveChangesAsync(cancellationToken);
-            if (message.AttachmentDocumentId is { } file)
+            foreach (var file in await AllFilesAsync(message, cancellationToken))
             {
-                await files.HideForMeAsync(conversationId, file, cancellationToken);   // my reference only
+                await files.HideForMeAsync(conversationId, file, cancellationToken);   // my references only
             }
         }
     }

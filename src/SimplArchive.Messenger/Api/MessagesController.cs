@@ -18,9 +18,10 @@ public sealed class MessagesController(Messages messages) : ControllerBase
         var (view, page) = await messages.PageAsync(conversationId, after, limit, cancellationToken);
         var readOnly = view.IsReadOnly;
         var self = Self(conversationId);
+        var files = await messages.FilesOfAsync(page, cancellationToken);
         return new MessagePageResource
         {
-            Items = [.. page.Select(m => Resource(conversationId, m, readOnly))],
+            Items = [.. page.Select(m => Resource(conversationId, m, files.GetValueOrDefault(m.Id) ?? [], readOnly))],
             Links =
             [
                 new Link("self", self, "GET"),
@@ -41,9 +42,10 @@ public sealed class MessagesController(Messages messages) : ControllerBase
     [HttpPost]
     public async Task<ActionResult<MessageResource>> Send(Guid conversationId, [FromBody] SendRequest request, CancellationToken cancellationToken)
     {
+        var carried = request.Files();
         var message = await messages.SendAsync(conversationId, request.Id, request.Epoch, request.Ciphertext, request.ReplyToId,
-            request.AttachmentDocumentId, cancellationToken);
-        return Created($"{Self(conversationId)}/{message.Id}", Resource(conversationId, message));
+            carried, cancellationToken);
+        return Created($"{Self(conversationId)}/{message.Id}", Resource(conversationId, message, carried));
     }
 
     /// <summary>Edit your own message: the whole new ciphertext, with the If-Match of the version you read.</summary>
@@ -52,7 +54,7 @@ public sealed class MessagesController(Messages messages) : ControllerBase
     {
         var message = await messages.EditAsync(conversationId, messageId, IfMatch(), request.Epoch, request.Ciphertext, cancellationToken);
         Response.Headers.ETag = Tag(message);
-        return Resource(conversationId, message);
+        return Resource(conversationId, message, []);   // a message with files is not edited
     }
 
     /// <summary>Delete your own message for everyone, with the If-Match of the version you read.</summary>
@@ -78,7 +80,7 @@ public sealed class MessagesController(Messages messages) : ControllerBase
 
     private static string Tag(Message message) => $"\"{message.ConcurrencyToken}\"";
 
-    private static MessageResource Resource(Guid conversationId, Message m, bool readOnly = false)
+    private static MessageResource Resource(Guid conversationId, Message m, IReadOnlyList<Guid> files, bool readOnly = false)
     {
         var self = $"{Self(conversationId)}/{m.Id}";
         return new MessageResource
@@ -93,6 +95,11 @@ public sealed class MessagesController(Messages messages) : ControllerBase
             AttachmentDocumentId = m.AttachmentDocumentId,
             Ciphertext = m.Ciphertext,
             ETag = Tag(m),
+            Files = [.. files.Select(file => new MessageFileResource
+            {
+                DocumentId = file,
+                Links = [new Link("content", $"/{ConversationsController.Base}/{conversationId}/files/{file}", "GET")],
+            })],
             Restored = m.RestoredByUserId is not null,
             Links =
             [

@@ -5,7 +5,15 @@ replies, edit and delete), the people picker for a new chat or group, and a tabl
 Everything they do is `SimplArchive.Messenger.Client`'s `ChatSession`; the host supplies the session — its signed-in
 connection and its hardware-key opener — its accent colour, how an opened file is handed on, its document preview, and
 how a page keeps its bottom edge clear of the keyboard (applied to every page the screens build, so the compose field
-stays above it).
+stays above it), and its live connection (`IMessengerLiveEvents`): the host's own, the one its notifications arrive on,
+so the screens open no second one.
+
+"Is typing" (#26): while the compose field is typed in, the thread says so to the other members (again every few
+seconds while typing goes on, a stop on send, on leaving the field or after five idle seconds), and shows beneath the
+messages who else is typing — "Anna is typing…", "Anna and Tom are typing…", "Several people are typing…" — each
+forgotten six seconds after their last event. Both ways or not at all: the switch is under *Messenger settings* in the
+conversation list's menu, and off, the server offers no `typing` on the conversation, so the thread neither sends nor
+shows it.
 
 Send waits for its answer: from the tap until the server answers, Send and the keyboard's Send key do nothing, the text
 stays in the field and the thread shows it as "sending…"; a failed send leaves the text there, never sent twice.
@@ -16,7 +24,7 @@ closing over it) or because something arrived.
 
 ```csharp
 var session = new ChatSession(api, keyOpener, myUserId, myEmail);
-var screens = new MessengerScreens(session, accent, handoff, preview, keepClearOfKeyboard);
+var screens = new MessengerScreens(session, accent, handoff, preview, keepClearOfKeyboard, liveEvents);
 await Navigation.PushAsync(screens.Conversations(split: tabletLayout));
 ```
 

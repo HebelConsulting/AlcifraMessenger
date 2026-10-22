@@ -106,6 +106,25 @@ public sealed class MessengerApi(HttpClient http, HttpClient? storage = null)
     public Task MarkReadAsync(Conversation conversation, DateTimeOffset readUpTo, CancellationToken cancellationToken = default) =>
         SendAsync(Follow(conversation, "receipt"), new { readUpTo }, cancellationToken);
 
+    /// <summary>
+    /// The caller started (<paramref name="typing"/>) or stopped typing in <paramref name="conversation"/> (#26). Offered
+    /// only where the caller's typing indicator is on; the server tells the other members' open apps, and answers alike
+    /// whether it did.
+    /// </summary>
+    public Task TypingAsync(Conversation conversation, bool typing, CancellationToken cancellationToken = default) =>
+        SendAsync(Follow(conversation, "typing"), new { typing }, cancellationToken);
+
+    /// <summary>The caller's own preferences (#26), from the conversation list's <c>preferences</c> link.</summary>
+    public Task<MessengerPreferences> PreferencesAsync(ConversationList list, CancellationToken cancellationToken = default) =>
+        GetAsync<MessengerPreferences>(Follow(list, "preferences").Href, cancellationToken);
+
+    /// <summary>
+    /// Replaces the caller's preferences, provided nobody changed them since <paramref name="read"/> (another device): a
+    /// refusal is <c>ETAG_MISMATCH</c>. Returns them as stored, with their new tag.
+    /// </summary>
+    public Task<MessengerPreferences> ReplacePreferencesAsync(MessengerPreferences read, bool typingIndicator, CancellationToken cancellationToken = default) =>
+        SendAsync<MessengerPreferences>(new Link("replace", Follow(read, "self").Href, "PUT"), new { typingIndicator }, cancellationToken, read.ETag);
+
     /// <summary>The first page of messages, oldest first.</summary>
     public Task<MessagePage> MessagesAsync(Conversation conversation, CancellationToken cancellationToken = default) =>
         GetAsync<MessagePage>(Follow(conversation, "messages").Href, cancellationToken);
@@ -118,13 +137,24 @@ public sealed class MessengerApi(HttpClient http, HttpClient? storage = null)
     public Task<Message> SendAsync(
         MessagePage page, Guid messageId, int epoch, byte[] ciphertext, Guid? replyToId = null, Guid? attachmentDocumentId = null,
         CancellationToken cancellationToken = default) =>
+        SendAsync(page, messageId, epoch, ciphertext, replyToId, attachmentDocumentId is { } one ? [one] : [], cancellationToken);
+
+    /// <summary>
+    /// Posts a message carrying <paramref name="attachmentDocumentIds"/>, in order (several files and a caption are one
+    /// message). An overload, not a changed signature, so a caller compiled against the one-file form keeps binding to it.
+    /// The first also travels as the single attachment, which is how a server that predates several files reads it.
+    /// </summary>
+    public Task<Message> SendAsync(
+        MessagePage page, Guid messageId, int epoch, byte[] ciphertext, Guid? replyToId, IReadOnlyList<Guid> attachmentDocumentIds,
+        CancellationToken cancellationToken = default) =>
         SendAsync<Message>(Follow(page, "send"), new
         {
             id = messageId,
             epoch,
             ciphertext,
             replyToId,
-            attachmentDocumentId,
+            attachmentDocumentId = attachmentDocumentIds.Count > 0 ? attachmentDocumentIds[0] : (Guid?)null,
+            attachmentDocumentIds,
         }, cancellationToken);
 
     /// <summary>Replaces the text of the caller's own message, provided nobody changed it since <paramref name="message"/> was read.</summary>
@@ -162,9 +192,21 @@ public sealed class MessengerApi(HttpClient http, HttpClient? storage = null)
     }
 
     /// <summary>The sealed file a message carries. The server answers with a redirect to the store, followed without the token.</summary>
-    public async Task<byte[]> DownloadFileAsync(Message message, CancellationToken cancellationToken = default)
+    public Task<byte[]> DownloadFileAsync(Message message, CancellationToken cancellationToken = default) =>
+        DownloadAsync(Follow(message, "attachment").Href, cancellationToken);
+
+    /// <summary>
+    /// The message's file at <paramref name="index"/> (0 is its first), sealed: by its <c>content</c> link, or the
+    /// <c>attachment</c> for the first from a server that lists no files.
+    /// </summary>
+    public Task<byte[]> DownloadFileAsync(Message message, int index, CancellationToken cancellationToken = default) =>
+        message.Files.Count == 0 && index == 0 ? DownloadFileAsync(message, cancellationToken)
+            : index >= 0 && index < message.Files.Count ? DownloadAsync(Follow(message.Files[index], "content").Href, cancellationToken)
+            : throw new MessengerApiException("MESSENGER_NOT_OFFERED", 404, $"The message carries no file {index}.");
+
+    private async Task<byte[]> DownloadAsync(string href, CancellationToken cancellationToken)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, Follow(message, "attachment").Href);
+        using var request = new HttpRequestMessage(HttpMethod.Get, href);
         using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         if (response.StatusCode is HttpStatusCode.Redirect or HttpStatusCode.Found or HttpStatusCode.TemporaryRedirect
             && response.Headers.Location is { } location)

@@ -108,6 +108,13 @@ internal abstract class ScreenView : ContentView
         {
             _arrivals = Screens.Open.Show(Host.Page, reloads.Conversation, reloads.Read);
         }
+
+        Showing(showing && !IsClosed);
+    }
+
+    /// <summary>The screen came on show or left it (also for good): a thread listens for "is typing" only meanwhile.</summary>
+    protected virtual void Showing(bool showing)
+    {
     }
 
     /// <summary>What an arrival reads again while the screen is on show: a thread's conversation and its pull-down's read.

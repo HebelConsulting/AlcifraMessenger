@@ -1,8 +1,8 @@
 namespace SimplArchive.Messenger.ReadModel;
 
 // The Messenger's own tables (schema approved by the owner, 2026-10-16). Everything a person writes is CIPHERTEXT;
-// the server never holds a conversation key in the clear. Only messages are concurrency-tracked: the other rows are
-// append-only, created-and-deleted, or move only forward, so a lost update cannot happen to them.
+// the server never holds a conversation key in the clear. Messages and a user's preferences are concurrency-tracked: the
+// other rows are append-only, created-and-deleted, or move only forward, so a lost update cannot happen to them.
 
 /// <summary>The one one-to-one conversation of a pair: <see cref="UserA"/> sorts before <see cref="UserB"/>.</summary>
 public sealed class DirectConversation
@@ -144,4 +144,47 @@ public sealed class OriginMember
     public Guid TenantId { get; set; }
     public string Email { get; set; } = string.Empty;
     public string DisplayName { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// One user's own Messenger preferences (#26): today whether the typing indicator is on — reciprocal, so off means the
+/// user's typing is not shown to anyone AND nobody's typing is shown to them. No row is the default: on.
+/// </summary>
+/// <remarks>
+/// <para>
+/// <b>Concurrency-tracked</b>: a person edits it from what they saw, on any of their devices, so a PUT carries the
+/// If-Match of the read that filled the switch; <see cref="Guid.Empty"/> is the tag of "no row yet".
+/// </para>
+/// <para>
+/// The one row of the read model that is not derived from documents (owner decision 2026-10-21: the preference lives in
+/// the Messenger's own read model). A rebuild that lost it would only bring back the default, on — a preference, never
+/// content.
+/// </para>
+/// </remarks>
+public sealed class UserPreferences
+{
+    public Guid TenantId { get; set; }
+    public Guid UserId { get; set; }
+
+    /// <summary>Whether the user's typing is shown to the others, and theirs to the user.</summary>
+    public bool TypingIndicator { get; set; } = true;
+
+    public Guid ConcurrencyToken { get; set; }
+}
+
+/// <summary>
+/// A further file a message carries (owner decision 2026-10-21: several files and a caption are ONE message): its first
+/// file stays <see cref="Message.AttachmentDocumentId"/>, so a client that knows only one file per message still shows
+/// that one and the caption; the second and later are rows here, at <see cref="Position"/> 1, 2, …
+/// </summary>
+/// <remarks>Not concurrency-tracked: created with its message and deleted with it, never edited — a child guarded by
+/// the tracked <see cref="Message"/> (a file message is not edited, and deleting it for everyone honours If-Match).</remarks>
+public sealed class MessageFile
+{
+    public Guid MessageId { get; set; }
+    public int Position { get; set; }
+    public Guid TenantId { get; set; }
+
+    /// <summary>The Message Object in the conversation's folder.</summary>
+    public Guid DocumentId { get; set; }
 }

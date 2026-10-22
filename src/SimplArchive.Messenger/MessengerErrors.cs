@@ -35,10 +35,13 @@ public static class MessengerErrors
         "A message with this id exists already; a client chooses a fresh id for every message.");
 
     public static ModuleApiException IfMatchRequired() => new("IF_MATCH_REQUIRED", 428,
-        "Send the If-Match of the message you are changing.");
+        "Send the If-Match of what you read before changing it.");
 
     public static ModuleApiException EtagMismatch() => new("ETAG_MISMATCH", 412,
         "The message has been changed since you read it.");
+
+    public static ModuleApiException PreferencesChanged() => new("ETAG_MISMATCH", 412,
+        "Your preferences have been changed since you read them (on another device?); read them again.");
 
     public static ModuleApiException RekeyNeeded() => new("MESSENGER_REKEY_NEEDED", 409,
         "Somebody left: a new key must be published before anything more is sent.");
