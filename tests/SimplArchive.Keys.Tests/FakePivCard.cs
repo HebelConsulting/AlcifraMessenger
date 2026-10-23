@@ -13,10 +13,19 @@ namespace SimplArchive.Keys.Tests;
 /// </summary>
 /// <param name="version">What GET VERSION answers (three bytes), or null for a key without it (6D00).</param>
 /// <param name="serial">What GET SERIAL answers, or null for a key without it (6D00).</param>
+/// <param name="slotAttestation">What ATTEST for slot 9D answers (a certificate's DER), or null for none.</param>
+/// <param name="attestationCertificate">What GET DATA 5FFF01 (slot F9) answers, or null for none (6A82).</param>
+/// <param name="attestRefusal">The status word ATTEST answers instead: 6D00 (firmware without it), 6A80 (an imported key).</param>
+/// <remarks>Like a real key it answers 6D00 to every PIV command until PIV is SELECTed (the 5Ci over Lightning did).</remarks>
 internal sealed class FakePivCard(
-    X509Certificate2 certificate, AsymmetricAlgorithm privateKey, string pin = "123456", byte[]? version = null, uint? serial = null)
+    X509Certificate2 certificate, AsymmetricAlgorithm privateKey, string pin = "123456", byte[]? version = null, uint? serial = null,
+    byte[]? slotAttestation = null, byte[]? attestationCertificate = null, ushort? attestRefusal = null)
     : IApduTransport
 {
+    private static readonly byte[] KeyManagementObject = [0x5C, 0x03, 0x5F, 0xC1, 0x0B];
+    private static readonly byte[] AttestationObject = [0x5C, 0x03, 0x5F, 0xFF, 0x01];
+    private bool _selected;
+
     private readonly List<byte> _chained = [];
     private byte[] _pending = [];
     private bool _verified;
@@ -40,17 +49,35 @@ internal sealed class FakePivCard(
 
         data = [.. _chained, .. data];
         _chained.Clear();
+        if (ins == 0xA4)
+        {
+            _selected = data.AsSpan().SequenceEqual((byte[])[0xA0, 0x00, 0x00, 0x03, 0x08]);
+            return _selected ? [0x90, 0x00] : [0x6A, 0x82];
+        }
+
+        if (!_selected)
+        {
+            return [0x6D, 0x00];
+        }
+
         return ins switch
         {
-            0xA4 => [0x90, 0x00],
             0x20 => Verify(data),
-            0xCB => Answer(PivSession.Tlv(0x53, [.. PivSession.Tlv(0x70, certificate.RawData), .. PivSession.Tlv(0x71, [0]), 0xFE, 0x00])),
+            0xCB when data.AsSpan().SequenceEqual(KeyManagementObject) => CertificateObject(certificate.RawData),
+            0xCB when data.AsSpan().SequenceEqual(AttestationObject) && attestationCertificate is not null => CertificateObject(attestationCertificate),
+            0xCB => [0x6A, 0x82],
+            0xF9 when attestRefusal is { } refusal => [(byte)(refusal >> 8), (byte)refusal],
+            0xF9 when apdu[2] == PivSession.KeyManagementSlot && slotAttestation is not null => Answer(slotAttestation),
+            0xF9 => [0x6A, 0x80],
             0xFD when version is not null => [.. version, 0x90, 0x00],
             0xF8 when serial is { } number => [(byte)(number >> 24), (byte)(number >> 16), (byte)(number >> 8), (byte)number, 0x90, 0x00],
             0x87 => _verified ? Answer(PivSession.Tlv(0x7C, PivSession.Tlv(0x82, Operate(apdu[2], data)))) : [0x69, 0x82],
             _ => [0x6D, 0x00],
         };
     }
+
+    private byte[] CertificateObject(byte[] der) =>
+        Answer(PivSession.Tlv(0x53, [.. PivSession.Tlv(0x70, der), .. PivSession.Tlv(0x71, [0]), 0xFE, 0x00]));
 
     private byte[] Verify(byte[] padded)
     {

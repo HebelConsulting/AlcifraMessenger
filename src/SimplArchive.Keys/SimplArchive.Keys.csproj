@@ -4,7 +4,7 @@
     <!-- The hardware-key core: a PIV session over any APDU transport, and opening a CMS envelope with the key on it. No
          platform code: an app supplies the connection (NFC, USB) through IKeyConnector. -->
     <PackageId>SimplArchive.Keys</PackageId>
-    <Version>0.2.0</Version>
+    <Version>0.3.0</Version>
     <Description>Open CMS envelopes with a PIV hardware key: an APDU-level PIV session, RSA key transport and elliptic-curve key agreement, over a transport the app supplies.</Description>
     <Authors>Hebel Consulting</Authors>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
