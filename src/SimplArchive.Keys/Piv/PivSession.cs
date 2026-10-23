@@ -22,7 +22,8 @@ public enum PivAlgorithm : byte
 /// <summary>
 /// The PIV application on a hardware key (NIST SP 800-73-4), reduced to what opening an envelope needs: select, verify
 /// the PIN, read the key-management certificate, and the one private-key operation (RSA decipher or ECDH) — plus the
-/// key's version and serial number, which a support report names it by.
+/// key's version and serial number, which a support report names it by, and the key's attestation, with which enrolling
+/// it proves the key was made on the token.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -37,6 +38,9 @@ public sealed class PivSession(IApduTransport transport)
 {
     /// <summary>The key-management slot, where a decryption key lives.</summary>
     public const byte KeyManagementSlot = 0x9D;
+
+    /// <summary>The attestation slot, where the manufacturer's attestation key and its certificate live.</summary>
+    public const byte AttestationSlot = 0xF9;
 
     private static readonly byte[] PivAid = [0xA0, 0x00, 0x00, 0x03, 0x08];
 
@@ -70,16 +74,54 @@ public sealed class PivSession(IApduTransport transport)
     }
 
     /// <summary>The certificate in the key-management slot (9D), or null when the slot holds none.</summary>
-    public X509Certificate2? ReadKeyManagementCertificate()
+    public X509Certificate2? ReadKeyManagementCertificate() => ReadCertificateObject([0x5F, 0xC1, 0x0B], "reading the certificate");
+
+    /// <summary>
+    /// The key's own attestation certificate (slot F9, object 5FFF01): the certificate of the key that signs a slot's
+    /// attestation, put there by the manufacturer and chaining to its attestation root. Null when the key holds none.
+    /// </summary>
+    /// <remarks>Public data, no PIN. A verifier needs it beside <see cref="Attest"/>'s answer: the token holds no further
+    /// intermediates, and a verifier that knows the manufacturer's supplies them itself.</remarks>
+    public X509Certificate2? ReadAttestationCertificate() => ReadCertificateObject([0x5F, 0xFF, 0x01], "reading the attestation certificate");
+
+    /// <summary>
+    /// The attestation of the key in <paramref name="slot"/>: a certificate for that slot's public key, issued on the spot by
+    /// the key's attestation key (slot F9), which says the key was GENERATED on this token and cannot leave it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// ATTEST (INS F9, P1 = the slot) is not part of NIST SP 800-73-4 but the manufacturer's widely implemented extension
+    /// (firmware 4.3 and later); it answers the certificate's DER directly, not wrapped in a data object. No PIN.
+    /// </para>
+    /// <para>
+    /// Its two refusals are facts about the key, each with its own exception, because the person holding it is told
+    /// different things: a key whose firmware has no ATTEST (<c>6D00</c>) can attest nothing, while a slot whose key was
+    /// IMPORTED, or which holds none, cannot be attested (<c>6A80</c>, <c>6A82</c>) — the key may be fine for another slot.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="PivAttestationNotSupportedException">The key's firmware cannot attest.</exception>
+    /// <exception cref="PivKeyNotAttestableException">The slot's key was imported, or the slot holds none.</exception>
+    public X509Certificate2 Attest(byte slot = KeyManagementSlot)
     {
-        // GET DATA for object 5FC10B: answers 53 { 70 cert, 71 certinfo, FE lrc }.
-        var response = Send(0x00, 0xCB, 0x3F, 0xFF, [0x5C, 0x03, 0x5F, 0xC1, 0x0B]);
+        var response = Send(0x00, 0xF9, slot, 0x00, []);
+        return StatusWord(response) switch
+        {
+            0x6D00 => throw new PivAttestationNotSupportedException(),
+            0x6A80 or 0x6A82 => throw new PivKeyNotAttestableException(slot, StatusWord(response)),
+            _ => X509CertificateLoader.LoadCertificate(Expect("attesting the key", response)),
+        };
+    }
+
+    // GET DATA for a certificate object: answers 53 { 70 cert, 71 certinfo, FE lrc }; 6A82 when the object is absent.
+    private X509Certificate2? ReadCertificateObject(byte[] objectId, string operation)
+    {
+        var response = Send(0x00, 0xCB, 0x3F, 0xFF, [0x5C, (byte)objectId.Length, .. objectId]);
         if (StatusWord(response) == 0x6A82)
         {
             return null;
         }
 
-        var data = Expect("reading the certificate", response);
+        var data = Expect(operation, response);
         return X509CertificateLoader.LoadCertificate(Value(Value(data, 0x53), 0x70));
     }
 
