@@ -9,5 +9,9 @@ Opens CMS envelopes (S/MIME enveloped data) with the private key on a PIV hardwa
 - `EnvelopeOpener`: finds the recipient addressed to that certificate and opens the envelope: RSA key transport
   (PKCS#1 v1.5 and OAEP) or elliptic-curve key agreement (ECDH, X9.63 KDF, RFC 3394 key wrap).
 - `IKeyConnector`: the one thing an app implements, connecting to the key over NFC or USB on its platform.
+- `IEnvelopeKey` (0.4.0): the one private operation an envelope needs (ECDH, or RSA decryption), for a key that is NOT
+  reached by APDUs — a key the operating system holds for a smart card, which asks for the PIN itself.
+  `EnvelopeOpener.Open(envelope, key)` does every CMS step for it; `PivEnvelopeKey` is the APDU key behind the
+  `Open(envelope, transport, pin)` overload.
 
 Apache License 2.0.

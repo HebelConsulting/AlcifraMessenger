@@ -14,12 +14,12 @@ public sealed record OpenedEnvelope(byte[] Content, string Scheme, string Certif
 }
 
 /// <summary>
-/// Opens a CMS envelope with the hardware key: find the recipient addressed to the certificate in the key's PIV slot 9D
-/// (key management), and open it by its type.
+/// Opens a CMS envelope with a key: find the recipient addressed to the key's certificate (on a PIV key, slot 9D, key
+/// management), and open it by its type. The key is an <see cref="IEnvelopeKey"/>; the CMS work is all here.
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>RSA key transport</b> goes through the platform's <c>EnvelopedCms.Decrypt</c> with <see cref="CardRsa"/>: the card does
+/// <b>RSA key transport</b> goes through the platform's <c>EnvelopedCms.Decrypt</c> with the key as an <see cref="RSA"/>: the key does
 /// the private operation, the platform the rest. <b>Elliptic-curve key agreement</b> goes through <see cref="KeyAgreement"/>,
 /// because the platform cannot open such a recipient with an external key outside Windows.
 /// </para>
@@ -38,11 +38,20 @@ public static class EnvelopeOpener
     /// <exception cref="EnvelopeException">The envelope is not addressed to this key, or cannot be opened.</exception>
     public static OpenedEnvelope Open(byte[] envelope, IApduTransport transport, string pin)
     {
-        var session = new PivSession(transport);
-        session.Select();
-        using var certificate = session.ReadKeyManagementCertificate()
-            ?? throw new EnvelopeException("this key holds no certificate in its key-management slot (9D)");
+        using var key = new PivEnvelopeKey(transport, pin);
+        return Open(envelope, key);
+    }
 
+    /// <summary>
+    /// Opens <paramref name="envelope"/> with <paramref name="key"/>, wherever that key lives: the recipient addressed to
+    /// its certificate is found first, <see cref="IEnvelopeKey.Unlock"/> is called only then, and the key does the one
+    /// private operation its recipient type needs. Every other step is done here, the same for every kind of key.
+    /// </summary>
+    /// <exception cref="EnvelopeException">The envelope is not addressed to this key, or cannot be opened.</exception>
+    public static OpenedEnvelope Open(byte[] envelope, IEnvelopeKey key)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        var certificate = key.Certificate;
         var cms = new EnvelopedCms();
         try
         {
@@ -59,23 +68,23 @@ public static class EnvelopeOpener
             throw new EnvelopeException($"it is not addressed to this key's certificate ({certificate.Subject})");
         }
 
-        session.VerifyPin(pin);
+        key.Unlock();
         var recipient = cms.RecipientInfos[index];
         return recipient switch
         {
-            KeyTransRecipientInfo => OpenKeyTransport(cms, recipient, session, certificate),
-            KeyAgreeRecipientInfo => OpenKeyAgreement(envelope, cms, index, recipient, session, certificate),
+            KeyTransRecipientInfo => OpenKeyTransport(cms, recipient, key),
+            KeyAgreeRecipientInfo => OpenKeyAgreement(envelope, index, recipient, key),
             _ => throw new EnvelopeException($"its recipient type {recipient.Type} is not supported"),
         };
     }
 
-    private static OpenedEnvelope OpenKeyTransport(EnvelopedCms cms, RecipientInfo recipient, PivSession session, X509Certificate2 certificate)
+    private static OpenedEnvelope OpenKeyTransport(EnvelopedCms cms, RecipientInfo recipient, IEnvelopeKey key)
     {
-        using var publicKey = certificate.GetRSAPublicKey() ?? throw new EnvelopeException("the key's certificate is not an RSA certificate");
-        using var cardKey = new CardRsa(session, publicKey);
+        using var publicKey = key.Certificate.GetRSAPublicKey() ?? throw new EnvelopeException("the key's certificate is not an RSA certificate");
+        using var keyAsRsa = new EnvelopeKeyRsa(key, publicKey);
         try
         {
-            cms.Decrypt(recipient, cardKey);
+            cms.Decrypt(recipient, keyAsRsa);
         }
         catch (CryptographicException e)
         {
@@ -88,20 +97,15 @@ public static class EnvelopeOpener
             "1.2.840.113549.1.1.7" => "OAEP",
             var other => other,
         };
-        return new OpenedEnvelope(cms.ContentInfo.Content, $"RSA key transport ({padding})", certificate.Subject);
+        return new OpenedEnvelope(cms.ContentInfo.Content, $"RSA key transport ({padding})", key.Certificate.Subject);
     }
 
-    private static OpenedEnvelope OpenKeyAgreement(byte[] envelope, EnvelopedCms cms, int index, RecipientInfo recipient, PivSession session, X509Certificate2 certificate)
+    private static OpenedEnvelope OpenKeyAgreement(byte[] envelope, int index, RecipientInfo recipient, IEnvelopeKey key)
     {
-        using var publicKey = certificate.GetECDiffieHellmanPublicKey() ?? throw new EnvelopeException("the key's certificate is not an elliptic-curve certificate");
-        var algorithm = publicKey.KeySize switch
-        {
-            256 => PivAlgorithm.EccP256,
-            384 => PivAlgorithm.EccP384,
-            _ => throw new EnvelopeException($"a P-{publicKey.KeySize} key is not one a PIV key holds"),
-        };
+        using var publicKey = key.Certificate.GetECDiffieHellmanPublicKey() ?? throw new EnvelopeException("the key's certificate is not an elliptic-curve certificate");
+        var size = publicKey.KeySize;
 
-        var contentKey = KeyAgreement.ContentKey(envelope, index, recipient.EncryptedKey, point => session.EcdhSharedSecret(algorithm, point));
+        var contentKey = KeyAgreement.ContentKey(envelope, index, recipient.EncryptedKey, key.Agree);
         var (cipherOid, iv) = KeyAgreement.ReadContentCipher(envelope);
         if (cipherOid != AesCbcOid)
         {
@@ -111,7 +115,7 @@ public static class EnvelopeOpener
         using var aes = Aes.Create();
         aes.Key = contentKey;
         var encrypted = EncryptedContent(envelope);
-        return new OpenedEnvelope(aes.DecryptCbc(encrypted, iv), $"EC key agreement (P-{publicKey.KeySize})", certificate.Subject);
+        return new OpenedEnvelope(aes.DecryptCbc(encrypted, iv), $"EC key agreement (P-{size})", key.Certificate.Subject);
     }
 
     /// <summary>The encrypted content octets, read raw (the platform hides them until it decrypts).</summary>
