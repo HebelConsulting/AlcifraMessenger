@@ -9,7 +9,7 @@
     <Description>The Alcifra Messenger module: conversations sealed to their members' hardware keys, stored as ciphertext.</Description>
     <Authors>Hebel Consulting</Authors>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
-    <RepositoryUrl>https://github.com/HebelConsulting/SimplArchiveMessenger</RepositoryUrl>
+    <RepositoryUrl>https://github.com/HebelConsulting/AlcifraMessenger</RepositoryUrl>
   </PropertyGroup>
 
   <ItemGroup>
