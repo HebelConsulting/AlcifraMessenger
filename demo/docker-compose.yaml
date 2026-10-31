@@ -1,7 +1,7 @@
 # A local Alcifra with the Messenger module, for trying the module and walking the phone's Messages tile on an
 # emulator. NOT production: it is the core's development stack (a sibling checkout of the core) plus this module.
-# The core is the public core repository, checked out beside this one (../../SimplArchive); set
-# SIMPLARCHIVE_CORE to use a checkout somewhere else.
+# The core is the public core repository, checked out beside this one (../../Alcifra); set
+# ALCIFRA_CORE (formerly SIMPLARCHIVE_CORE, still read) to use a checkout somewhere else.
 #
 # The module is placed through `modules-local`, the one placeholder every api instance waits for (core ADR 0808), so
 # every instance loads it; mounting it onto `api` would give one instance the module and the other none.
@@ -11,7 +11,7 @@
 name: messenger-demo
 
 include:
-  - path: ${SIMPLARCHIVE_CORE:-../../SimplArchive}/docker-compose.yaml
+  - path: ${ALCIFRA_CORE:-../../Alcifra}/docker-compose.yaml
 
 services:
   modules-local:
