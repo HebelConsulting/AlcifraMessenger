@@ -8,7 +8,7 @@
     <Description>Open CMS envelopes with a PIV hardware key: an APDU-level PIV session, RSA key transport and elliptic-curve key agreement, over a transport the app supplies.</Description>
     <Authors>Hebel Consulting</Authors>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
-    <RepositoryUrl>https://github.com/HebelConsulting/SimplArchiveMessenger</RepositoryUrl>
+    <RepositoryUrl>https://github.com/HebelConsulting/AlcifraMessenger</RepositoryUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>

@@ -21,7 +21,7 @@
     <Description>The Alcifra Messenger's screens for a cross-platform app: conversations, the thread and the people picker, side by side on a tablet.</Description>
     <Authors>Hebel Consulting</Authors>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
-    <RepositoryUrl>https://github.com/HebelConsulting/SimplArchiveMessenger</RepositoryUrl>
+    <RepositoryUrl>https://github.com/HebelConsulting/AlcifraMessenger</RepositoryUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
   <ItemGroup>
