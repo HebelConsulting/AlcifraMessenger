@@ -1,6 +1,6 @@
 # Alcifra Messenger
 
-An end-to-end encrypted messenger for [Alcifra](https://github.com/HebelConsulting/SimplArchive): conversations
+An end-to-end encrypted messenger for [Alcifra](https://github.com/HebelConsulting/Alcifra): conversations
 between the people of one Alcifra installation, sealed to their own hardware keys. The server stores ciphertext
 and never sees a message.
 
