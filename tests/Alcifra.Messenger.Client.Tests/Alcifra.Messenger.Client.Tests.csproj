@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Alcifra.Messenger.Client\Alcifra.Messenger.Client.csproj" />
+    <!-- Keys are opened the way an app opens them: the key library's EnvelopeOpener, over the simulated PIV card. -->
+    <ProjectReference Include="..\..\src\Alcifra.Keys\Alcifra.Keys.csproj" />
+    <Compile Include="..\Alcifra.Keys.Tests\FakePivCard.cs" Link="FakePivCard.cs" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,97 @@
+using Microsoft.Extensions.DependencyInjection;
+using Alcifra.Messenger.ReadModel;
+using SimplArchive.ModuleAbi;
+
+namespace Alcifra.Messenger;
+
+/// <summary>
+/// The Messenger: conversations between the people of one Alcifra installation, sealed to their hardware keys. The
+/// server stores ciphertext only; a conversation key per epoch is wrapped to every member's enrolled certificates.
+/// </summary>
+public sealed class MessengerModule : IIndustryModule
+{
+    /// <summary>The setting naming the repository or folder conversations are filed under; chosen by an administrator.</summary>
+    public const string RepositorySetting = "messenger.repositoryId";
+
+    /// <summary>
+    /// The setting that keeps opened files in the app (#27): on, a phone or desktop never hands a file to another app, and
+    /// what it cannot show itself stays closed. Off — and unset, which is every tenant until an administrator decides —
+    /// a file can be handed on, deliberately and after a warning that it leaves the Messenger's protection.
+    /// </summary>
+    public const string FilesStayInAppSetting = "messenger.filesStayInApp";
+
+    public string ModuleId => "messenger";
+
+    public string DisplayName => "Messenger";
+
+    public int AbiMajorVersion => ModuleAbiVersion.Major;
+
+    public int AbiMinorVersion => ModuleAbiVersion.Minor;
+
+    /// <summary>The vendor's public licence-verification key, the one every Alcifra module trusts. Public by nature.</summary>
+    /// <summary>The Messenger is never licensed (owner, 2026-10-17; core ADR 0944): no key to verify a licence with.</summary>
+    public string LicenseVerifyKeyPem => string.Empty;
+
+    /// <summary>
+    /// Free and open source, wherever it runs: an administrator activates it without a licence file, and it never lapses
+    /// (ABI 1.23, core ADR 0944). The standalone start (demo/up.sh) does that by itself.
+    /// </summary>
+    public bool RequiresLicence => false;
+
+    public IReadOnlyList<ModuleMaskSeed> Masks => MessengerMasks.Seeds;
+
+    /// <summary>
+    /// The Messenger encrypts to users, so it licenses the core's certificate enrolment: while it is active, people can
+    /// enrol the certificates their conversation keys are wrapped to.
+    /// </summary>
+    public bool LicensesCertificateEnrolment => true;
+
+    private const string ManualResource = "Alcifra.Messenger.Manual.pdf";
+
+    /// <summary>
+    /// The manual this module ships (ABI 1.5): the core files it into the tenant's manuals folder, and a new version
+    /// whenever these bytes change, so a tenant reads the manual written for the code it runs.
+    /// </summary>
+    public ModuleManual? Manual { get; } = new(
+        "Alcifra-Messenger-Module-Manual.pdf",
+        () => typeof(MessengerModule).Assembly.GetManifestResourceStream(ManualResource)
+            ?? throw new InvalidOperationException($"The module's manual is not embedded as '{ManualResource}'."));
+
+    public IReadOnlyList<ModuleSetting> Settings { get; } =
+    [
+        new(RepositorySetting, "Where conversations are filed",
+            Description: "The id of the repository or folder group conversations and the shared folders of one-to-one chats "
+                + "are created in. Its rights should be an administrator's: members get access to their own conversations only."),
+        new(FilesStayInAppSetting, "Keep files in the app",
+            Description: "On: a sent file opens only in the app and is never handed to another app; what the app cannot show "
+                + "stays closed. Off (the default): such a file can be handed on, deliberately and after a warning that it "
+                + "leaves the app's protection.")
+        {
+            Kind = ModuleSettingKind.Boolean,
+        },
+    ];
+
+    public IReadOnlyList<ModuleReadModelSet> ReadModels { get; } = [new ModuleReadModelSet(typeof(MessengerReadModelContext))];
+
+    /// <summary>The Messenger's entries into the hypermedia graph: a client's only way to its addresses.</summary>
+    public IReadOnlyList<ModuleRootLink> RootLinks { get; } =
+    [
+        new("messenger:conversations", "/" + Api.ConversationsController.Base, "GET"),
+        new("messenger:people", "/" + Api.PeopleController.Base, "GET"),
+    ];
+
+    public void ConfigureServices(IServiceCollection services)
+    {
+        // Scoped: they depend on the read model and the facade, which are per request.
+        services.AddScoped<Conversations>();
+        services.AddScoped<Messages>();
+        services.AddScoped<Files>();
+        services.AddScoped<Restores>();
+        services.AddScoped<Continuations>();
+        services.AddScoped<Preferences>();
+        services.AddScoped<Typing>();
+
+        // One per process: it remembers each sender's last start across requests (#26).
+        services.AddSingleton<TypingThrottle>();
+    }
+}

@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Alcifra.Keys/Alcifra.Keys.csproj" />
+    <Project Path="src/Alcifra.Messenger.Views/Alcifra.Messenger.Views.csproj" />
+    <Project Path="src/Alcifra.Messenger/Alcifra.Messenger.csproj" />
+    <Project Path="src/Alcifra.Messenger.Client/Alcifra.Messenger.Client.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Alcifra.Keys.Tests/Alcifra.Keys.Tests.csproj" />
+    <Project Path="tests/Alcifra.Messenger.Client.Tests/Alcifra.Messenger.Client.Tests.csproj" />
+    <Project Path="tests/Alcifra.Messenger.Tests/Alcifra.Messenger.Tests.csproj" />
+  </Folder>
+</Solution>

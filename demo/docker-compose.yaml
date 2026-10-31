@@ -1,6 +1,6 @@
-# A local SimplArchive with the Messenger module, for trying the module and walking the phone's Messages tile on an
+# A local Alcifra with the Messenger module, for trying the module and walking the phone's Messages tile on an
 # emulator. NOT production: it is the core's development stack (a sibling checkout of the core) plus this module.
-# The core is the public SimplArchive repository, checked out beside this one (../../SimplArchive); set
+# The core is the public core repository, checked out beside this one (../../SimplArchive); set
 # SIMPLARCHIVE_CORE to use a checkout somewhere else.
 #
 # The module is placed through `modules-local`, the one placeholder every api instance waits for (core ADR 0808), so

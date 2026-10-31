@@ -8,7 +8,7 @@
 #page(numbering: none, footer: none)[
   #set align(center + horizon)
   #block[
-    #text(size: 34pt, weight: "bold", fill: accent)[SimplArchive]
+    #text(size: 34pt, weight: "bold", fill: accent)[Alcifra]
     #v(0.2em)
     #text(size: 18pt)[Messenger — Module Manual]
     #v(1.2em)
@@ -49,7 +49,7 @@ Everything a member writes or sends is *sealed on their own device*#idx("sealed"
 members, and opened only on a member's device. The server stores and forwards what it cannot read.
 
 The Messenger is a *free, open-source module*: it needs no licence, and a tenant administrator activates it for the
-tenant. Its clients are the SimplArchive apps: the
+tenant. Its clients are the Alcifra apps: the
 phone app's Messages tile comes first (in preparation), the desktop client next. The web client stays out, because a
 browser cannot reach a hardware key.
 

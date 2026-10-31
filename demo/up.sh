@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# One command to a SimplArchive with the Messenger ACTIVE on its Demo tenant — the standalone start of this repository:
-# builds the module, brings up the core's development stack with it (the public SimplArchive repository checked out
+# One command to an Alcifra with the Messenger ACTIVE on its Demo tenant — the standalone start of this repository:
+# builds the module, brings up the core's development stack with it (the public core repository checked out
 # beside this one, or wherever SIMPLARCHIVE_CORE points), then — through saconsole as the seeded setup account —
 # activates the module (it needs no licence, core ADR 0944), grants it its repository, configures it, and enrols a TEST
 # certificate for three demo users. Nothing is left for whoever runs it to switch on.
@@ -22,9 +22,9 @@ export SIMPLARCHIVE_CORE="$CORE"   # docker-compose.yaml includes the core's sta
 HOST=http://localhost:8080
 
 echo "==> Building the Messenger module…"
-dotnet build "$ROOT/src/SimplArchive.Messenger" -c Release -v quiet
+dotnet build "$ROOT/src/Alcifra.Messenger" -c Release -v quiet
 mkdir -p modules/messenger .local
-cp "$ROOT/src/SimplArchive.Messenger/bin/Release/net10.0/SimplArchive.Messenger.dll" modules/messenger/
+cp "$ROOT/src/Alcifra.Messenger/bin/Release/net10.0/Alcifra.Messenger.dll" modules/messenger/
 
 echo "==> Bringing up the core stack with the module (the first run builds the Api image)…"
 docker compose up -d --build
@@ -33,8 +33,8 @@ until curl -fsS "$HOST/health/ready" >/dev/null 2>&1; do echo -n "."; sleep 3; d
 echo " ready."
 
 # saconsole from the core checkout: the certificate commands are newer than a released tool may be.
-dotnet build "$CORE/src/SimplArchive.Cli" -c Release -v quiet
-sac() { dotnet "$CORE/src/SimplArchive.Cli/bin/Release/net10.0/saconsole.dll" "$@"; }
+dotnet build "$CORE/src/Alcifra.Cli" -c Release -v quiet
+sac() { dotnet "$CORE/src/Alcifra.Cli/bin/Release/net10.0/saconsole.dll" "$@"; }
 
 # The Demo tenant's stable ids (core #781): the same derivation the core's seeders use.
 demo_id() {
