@@ -16,4 +16,4 @@ export SOURCE_DATE_EPOCH
 # --ignore-system-fonts: Typst prefers an installed system font over its bundled copy, and an Ubuntu runner HAS
 # DejaVu installed — so without this flag Linux embedded a different DejaVu build than a Mac and the bytes differed
 # (found by this repository's own CI on its first run). Bundled fonts only, identical everywhere.
-typst compile --ignore-system-fonts manual.typ "${1:-SimplArchive-Messenger-Module-Manual.pdf}"
+typst compile --ignore-system-fonts manual.typ "${1:-Alcifra-Messenger-Module-Manual.pdf}"

@@ -1,0 +1,47 @@
+using Alcifra.Messenger.Client.Api;
+
+namespace Alcifra.Messenger.Client.Display;
+
+/// <summary>
+/// When the Messages screen shows the conversations beside the open conversation, and which conversation the right pane
+/// keeps once the list was read again — free of any user interface, so a host's tablet layout and its tests agree. The
+/// same rule as the Alcifra app's other wide-window lists: the window's width decides, never the kind of device,
+/// and the divider is fixed (the list about a third, the conversation the rest).
+/// </summary>
+public static class MessagesSplit
+{
+    /// <summary>The narrowest window, in points, that shows the conversation beside the list.</summary>
+    public const double MinimumWidth = 700;
+
+    /// <summary>The list's narrowest column, in points.</summary>
+    public const double ListMinimum = 320;
+
+    /// <summary>The list's widest column, in points.</summary>
+    public const double ListMaximum = 400;
+
+    /// <summary>Whether a window <paramref name="width"/> points wide shows the pane. A width not yet laid out (reported
+    /// as -1) does not.</summary>
+    public static bool Splits(double width) => width >= MinimumWidth;
+
+    /// <summary>The list's column in a window <paramref name="width"/> points wide; the conversation takes the rest.</summary>
+    public static double ListWidth(double width) => Math.Clamp(width / 3, ListMinimum, ListMaximum);
+
+    /// <summary>How long a phone's list marks the conversation Back returned from, so the eye finds its place.</summary>
+    public static readonly TimeSpan ReturnMarkFor = TimeSpan.FromSeconds(1.5);
+
+    /// <summary>
+    /// The conversation a list marks for a moment when Back returns to it from <paramref name="visited"/>: on a phone
+    /// only — beside a pane, the mark is the selection's and stays — and only while it is still listed (not once the
+    /// caller left it). Null: nothing to mark.
+    /// </summary>
+    public static Guid? ReturnMark(Guid? visited, IReadOnlyList<Conversation> rows, bool splits) =>
+        splits ? null : AfterReload(visited, rows)?.Id;
+
+    /// <summary>
+    /// The conversation in <paramref name="rows"/> that is <paramref name="selected"/> — its FRESH row, whose unread
+    /// count and links are today's — or null when it left the list (the caller left it, or was removed). Never the row
+    /// from before: a pane that keeps showing a conversation the caller is no longer in describes the wrong thing.
+    /// </summary>
+    public static Conversation? AfterReload(Guid? selected, IReadOnlyList<Conversation> rows) =>
+        selected is { } id ? rows.FirstOrDefault(row => row.Id == id) : null;
+}

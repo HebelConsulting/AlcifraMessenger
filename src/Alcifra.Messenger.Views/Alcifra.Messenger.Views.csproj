@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The Messenger's screens: the conversation list, the thread and the people picker, code-only MAUI. Hosted by the
+       Alcifra app's Messages tile and by the standalone app; everything they do is ChatSession's. Android now,
+       iOS when the iPhone build starts (owner, 2026-10-16). -->
+  <PropertyGroup>
+    <!-- Plain net10.0 too, so the texts and the view logic are tested on any machine. iOS where it can be built, on a Mac
+         with Xcode: the player reads from memory through the system player there (MemoryPlayer), which needs the
+         platform's own types. A package packed elsewhere would lack it, so packing refuses (below). -->
+    <TargetFrameworks>net10.0;net10.0-android</TargetFrameworks>
+    <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('OSX'))">$(TargetFrameworks);net10.0-ios26.0</TargetFrameworks>
+    <TargetFramework />
+    <UseMaui>true</UseMaui>
+    <SingleProject>false</SingleProject>
+    <SupportedOSPlatformVersion Condition="'$(TargetFramework)' == 'net10.0-android'">33.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion Condition="'$(TargetFramework)' == 'net10.0-ios26.0'">16.0</SupportedOSPlatformVersion>
+    <!-- DEBT, as the app's: the iOS 26.0 pack insists on exactly Xcode 26.0. Retire this, and target plain net10.0-ios,
+         with the app's own (when its build Mac has macOS 26 and Xcode 27). -->
+    <ValidateXcodeVersion Condition="'$(TargetFramework)' == 'net10.0-ios26.0'">false</ValidateXcodeVersion>
+    <PackageId>Alcifra.Messenger.Views</PackageId>
+    <Version>0.14.0</Version>
+    <Description>The Alcifra Messenger's screens for a cross-platform app: conversations, the thread and the people picker, side by side on a tablet.</Description>
+    <Authors>Hebel Consulting</Authors>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/HebelConsulting/SimplArchiveMessenger</RepositoryUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Maui.Controls" Version="10.0.110" />
+    <!-- MIT. Android's player for a video or a sound (#27): it plays from a stream, so the opened file stays in memory. -->
+    <PackageReference Include="CommunityToolkit.Maui.MediaElement" Version="10.0.0" />
+    <None Include="README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+  <!-- The iOS player's files belong to the iOS build alone. -->
+  <ItemGroup Condition="'$(TargetFramework)' != 'net10.0-ios26.0'">
+    <Compile Remove="Platforms/iOS/**" />
+  </ItemGroup>
+  <!-- A package without its iOS build would play nothing on an iPhone, silently: it is packed on a Mac or not at all. -->
+  <Target Name="RefusePackingWithoutIos" BeforeTargets="GenerateNuspec" Condition="!$([MSBuild]::IsOSPlatform('OSX'))">
+    <Error Text="Alcifra.Messenger.Views carries an iOS build, which only a Mac with Xcode makes: pack it there." />
+  </Target>
+  <ItemGroup>
+    <ProjectReference Include="..\Alcifra.Messenger.Client\Alcifra.Messenger.Client.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- The hardware-key core: a PIV session over any APDU transport, and opening a CMS envelope with the key on it. No
+         platform code: an app supplies the connection (NFC, USB) through IKeyConnector. -->
+    <PackageId>Alcifra.Keys</PackageId>
+    <Version>0.5.0</Version>
+    <Description>Open CMS envelopes with a PIV hardware key: an APDU-level PIV session, RSA key transport and elliptic-curve key agreement, over a transport the app supplies.</Description>
+    <Authors>Hebel Consulting</Authors>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/HebelConsulting/SimplArchiveMessenger</RepositoryUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <InternalsVisibleTo Include="Alcifra.Keys.Tests" />
+    <!-- The Messenger client tests open keys on the same simulated card, which builds its answers with these helpers. -->
+    <InternalsVisibleTo Include="Alcifra.Messenger.Client.Tests" />
+  </ItemGroup>
+
+</Project>

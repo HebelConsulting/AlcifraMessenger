@@ -25,8 +25,8 @@ jobs:
       - name: Rebuild and compare
         run: |
           manual/build.sh "$RUNNER_TEMP/rebuilt.pdf"
-          if ! cmp -s "$RUNNER_TEMP/rebuilt.pdf" manual/SimplArchive-Messenger-Module-Manual.pdf; then
-            echo "::error::manual/SimplArchive-Messenger-Module-Manual.pdf is not what manual.typ builds. Run manual/build.sh and commit the result."
+          if ! cmp -s "$RUNNER_TEMP/rebuilt.pdf" manual/Alcifra-Messenger-Module-Manual.pdf; then
+            echo "::error::manual/Alcifra-Messenger-Module-Manual.pdf is not what manual.typ builds. Run manual/build.sh and commit the result."
             exit 1
           fi
           echo "The committed manual PDF is exactly what its source builds."

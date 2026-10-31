@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- The module's own version; the ABI package below is the contract it is written against. -->
+    <Version>0.9.0</Version>
+    <AssemblyName>Alcifra.Messenger</AssemblyName>
+    <RootNamespace>Alcifra.Messenger</RootNamespace>
+    <PackageId>Alcifra.Messenger</PackageId>
+    <Description>The Alcifra Messenger module: conversations sealed to their members' hardware keys, stored as ciphertext.</Description>
+    <Authors>Hebel Consulting</Authors>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/HebelConsulting/SimplArchiveMessenger</RepositoryUrl>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- A module contributes controllers, which ride into the host as an application part, so it compiles against the
+         framework the host runs rather than a second copy of it. -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Pinned exactly: an ABI minor can be binary breaking, so the version compiled against is worth reading off. -->
+    <PackageReference Include="Alcifra.ModuleAbi" Version="1.26.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.13" />
+    <!-- The module owns its read-model migrations; the host applies them. Npgsql shapes them for production, the
+         Design package generates them. -->
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.13">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The manual SHIPS IN THE MODULE (ABI 1.5, core ADR 0891): the core files it into the tenant's "Alcifra
+         Manuals" folder on activation and at startup, as a new version whenever these bytes change. manual.yml proves
+         the committed PDF is what manual.typ builds, and ManualTests that the embedded copy is that file. -->
+    <EmbeddedResource Include="..\..\manual\Alcifra-Messenger-Module-Manual.pdf" LogicalName="Alcifra.Messenger.Manual.pdf" />
+  </ItemGroup>
+
+</Project>
