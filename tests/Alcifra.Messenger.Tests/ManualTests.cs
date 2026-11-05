@@ -1,5 +1,5 @@
 using System.Security.Cryptography;
-using SimplArchive.ModuleAbi;
+using Alcifra.ModuleAbi;
 
 namespace Alcifra.Messenger.Tests;
 

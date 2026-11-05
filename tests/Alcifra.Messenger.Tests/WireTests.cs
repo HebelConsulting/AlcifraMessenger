@@ -2,7 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Alcifra.Messenger.Client;
 using Alcifra.Messenger.Client.Api;
-using SimplArchive.ModuleAbi;
+using Alcifra.ModuleAbi;
 using ClientKey = Alcifra.Messenger.Client.Api.WrappedKey;
 
 namespace Alcifra.Messenger.Tests;

@@ -16,7 +16,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 ROOT="$(cd .. && pwd)"
-CORE="$(cd "${ALCIFRA_CORE:-${SIMPLARCHIVE_CORE:-../../Alcifra}}" 2>/dev/null && pwd || true)"
+CORE="$(cd "${ALCIFRA_CORE:-../../Alcifra}" 2>/dev/null && pwd || true)"
 [ -n "$CORE" ] || { echo "ERROR: no core checkout at ${ALCIFRA_CORE:-../../Alcifra} (clone https://github.com/HebelConsulting/Alcifra beside this repository, or set ALCIFRA_CORE)"; exit 1; }
 export ALCIFRA_CORE="$CORE"   # docker-compose.yaml includes the core's stack from the same place
 HOST=http://localhost:8080
@@ -48,10 +48,10 @@ REPOSITORY="$(demo_id repository/flight-school)"   # the seeded setup account's 
 
 echo "==> Signing in as the setup account…"
 # The secret rides in the login's own environment; the token is taken by an exact-shape match, never eval'd.
-login_out="$(SACONSOLE_CLIENT_SECRET=dev-messenger-setup-secret sac login --url "$HOST" --client-id messenger-setup)"
-SACONSOLE_TOKEN="$(printf '%s\n' "$login_out" | sed -n "s/^export SACONSOLE_TOKEN='\([A-Za-z0-9._~+\/=-]*\)'\$/\1/p")"
-[ -n "$SACONSOLE_TOKEN" ] || { echo "ERROR: saconsole login printed no token"; exit 1; }
-export SACONSOLE_TOKEN SACONSOLE_URL="$HOST"
+login_out="$(ALCIFRA_CLIENT_SECRET=dev-messenger-setup-secret sac login --url "$HOST" --client-id messenger-setup)"
+ALCIFRA_TOKEN="$(printf '%s\n' "$login_out" | sed -n "s/^export ALCIFRA_TOKEN='\([A-Za-z0-9._~+\/=-]*\)'\$/\1/p")"
+[ -n "$ALCIFRA_TOKEN" ] || { echo "ERROR: alcifra login printed no token"; exit 1; }
+export ALCIFRA_TOKEN ALCIFRA_URL="$HOST"
 
 echo "==> Activating the Messenger, granting it its repository, configuring it…"
 sac module activate --module messenger   # no licence: the Messenger needs none (core ADR 0944)
