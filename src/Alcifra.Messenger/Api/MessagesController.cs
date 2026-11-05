@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Alcifra.Messenger.ReadModel;
-using SimplArchive.ModuleAbi;
+using Alcifra.ModuleAbi;
 
 namespace Alcifra.Messenger.Api;
 

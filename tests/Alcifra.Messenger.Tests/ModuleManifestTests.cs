@@ -1,7 +1,7 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Alcifra.Messenger.ReadModel;
-using SimplArchive.ModuleAbi;
+using Alcifra.ModuleAbi;
 
 namespace Alcifra.Messenger.Tests;
 

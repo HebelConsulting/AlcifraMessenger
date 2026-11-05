@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Alcifra.Messenger.ReadModel;
-using SimplArchive.ModuleAbi;
+using Alcifra.ModuleAbi;
 
 namespace Alcifra.Messenger;
 

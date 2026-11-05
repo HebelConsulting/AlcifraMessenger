@@ -16,7 +16,7 @@ using Microsoft.Extensions.Options;
 using Alcifra.Messenger.Client;
 using Alcifra.Messenger.Client.Api;
 using Alcifra.Messenger.ReadModel;
-using SimplArchive.ModuleAbi;
+using Alcifra.ModuleAbi;
 using ClientKey = Alcifra.Messenger.Client.Api.WrappedKey;
 
 namespace Alcifra.Messenger.Tests;
