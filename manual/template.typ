@@ -154,13 +154,40 @@
   }
 }
 
+// Content as plain text: what a caption or a summary SAYS, without its emphasis, index markers or other metadata.
+// The website reads figures and features out of this manual (core #2165, core ADR 1010), with the core's markers.
+#let plain(it) = {
+  if it == none { "" }
+  else if type(it) == str { it }
+  else if it.func() == text { it.text }
+  else if it.func() == [ ].func() or it.func() == linebreak { " " }
+  else if it.func() == smartquote { if it.double { "\"" } else { "'" } }
+  else if it.func() == metadata { "" }
+  else if it.has("children") { it.children.map(plain).join(default: "") }
+  else if it.has("body") { plain(it.body) }
+  else if it.has("child") { plain(it.child) }
+  else { "" }
+}
+
+// A figure the site may show: its image files (relative to this directory) and its caption. The site names a figure
+// by the file stem of its FIRST file, so that one must be unique across the manual.
+#let site-figure(paths, caption) = [#metadata((files: paths, caption: plain(caption)))<site-figure>]
+
+// A feature the site presents: the paragraph is written here, in the manual, and the site reads the same words.
+// `figure` names a screenshot by its file stem. The paragraph renders unchanged.
+#let feature(id: none, title: none, figure: none, body) = {
+  assert(id != none and title != none, message: "a feature needs an id and a title")
+  [#metadata((id: id, title: title, figure: figure, summary: plain(body)))<site-feature>]
+  body
+}
+
 // A single captioned screenshot, framed with a thin border.
 //
 // `width` exists for TALL figures. A landscape screenshot at 100% of the text width is comfortably shorter than
 // a page; a portrait one — a dialog, say — is not: 520x1100 scaled to the text width becomes about twice the
 // height of the page, so Typst clips it and drops the caption onto the footer. Narrowing it is what makes a
 // portrait figure fit, and the value is chosen per figure because only the figure knows its own shape.
-#let shot(path, caption, width: 100%) = figure(
+#let shot(path, caption, width: 100%) = [#site-figure((path,), caption)#figure(
   block(
     stroke: 0.5pt + luma(200),
     radius: 3pt,
@@ -168,10 +195,10 @@
     image(path, width: width),
   ),
   caption: caption,
-)
+)]
 
 // A web + desktop pair, side by side, sharing one caption — the "both clients" figure the manual leans on.
-#let pair(web, desktop, caption) = figure(
+#let pair(web, desktop, caption) = [#site-figure((web, desktop), caption)#figure(
   grid(
     columns: (1fr, 1fr),
     gutter: 8pt,
@@ -179,7 +206,7 @@
     block(stroke: 0.5pt + luma(200), radius: 3pt, clip: true, image(desktop, width: 100%)),
   ),
   caption: caption,
-)
+)]
 
 // A short "at a glance" callout box for key terms / tips.
 #let note(body) = block(

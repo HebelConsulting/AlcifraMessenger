@@ -1,4 +1,4 @@
-#import "template.typ": conf, note, accent, idx, index-page
+#import "template.typ": conf, note, accent, idx, index-page, feature
 
 #show: doc => conf(doc)
 
@@ -41,12 +41,12 @@
 // ─────────────────────────────────────────────────────────────────────────────
 = Introduction
 
-The *Messenger*#idx("Messenger") lets the people of one archive talk to each other: one-to-one, or in a named group,
+#feature(id: "closed-group", title: "A closed user group")[The *Messenger*#idx("Messenger") lets the people of one archive talk to each other: one-to-one, or in a named group,
 with messages, photos and files. It is a *closed user group*#idx("closed user group"): only users of the same tenant
-take part, and only those with an enrolled key.
+take part, and only those with an enrolled key.]
 
-Everything a member writes or sends is *sealed on their own device*#idx("sealed") to the keys of the conversation's
-members, and opened only on a member's device. The server stores and forwards what it cannot read.
+#feature(id: "sealed", title: "Sealed on the device, to the members' keys")[Everything a member writes or sends is *sealed on their own device*#idx("sealed") to the keys of the conversation's
+members, and opened only on a member's device. The server stores and forwards what it cannot read.]
 
 The Messenger is a *free, open-source module*: it needs no licence, and a tenant administrator activates it for the
 tenant. Its clients are the Alcifra apps: the
@@ -95,8 +95,8 @@ configured repository; in each person's *My Messages* a folder named after the o
 
 == Groups
 
-A *group*#idx("group") has a name and starts with its creator as its *administrator*#idx("administrator"). Administrators
-add members, remove them, and make other members administrators or take that back. Anyone may leave.
+#feature(id: "groups", title: "Groups with administrators")[A *group*#idx("group") has a name and starts with its creator as its *administrator*#idx("administrator"). Administrators
+add members, remove them, and make other members administrators or take that back. Anyone may leave.]
 
 A group always keeps *at least one administrator*: the last one cannot step down, nor leave while others remain, until
 they have made someone else one. The administrators are listed on the group's folder, so the archive shows them too.
@@ -105,8 +105,8 @@ When the last member leaves, the conversation is removed, its folder and files w
 
 == Keys and epochs
 
-Each conversation has a *conversation key*#idx("conversation key"), and a new one for every *epoch*#idx("epoch"). A
-member holds the key of an epoch as a copy wrapped to their certificates.
+#feature(id: "epochs", title: "A new key for every change of members")[Each conversation has a *conversation key*#idx("conversation key"), and a new one for every *epoch*#idx("epoch"). A
+member holds the key of an epoch as a copy wrapped to their certificates.]
 
 - *Membership is the current epoch's keys.* Whoever holds a key for the current epoch, and has not left, is a member;
   the folder's access list follows.
@@ -168,9 +168,9 @@ opens that conversation, the key dialog first if the key is needed.
 // ─────────────────────────────────────────────────────────────────────────────
 = Photos and files
 
-A photo or file is sealed on the device like a message and uploaded straight to the archive's storage. It is filed
+#feature(id: "files", title: "Photos and files, sealed like a message")[A photo or file is sealed on the device like a message and uploaded straight to the archive's storage. It is filed
 once, as a *Message Object*#idx("Message Object") in the conversation's folder, and each member finds it through their
-own chat folder.
+own chat folder.]
 
 Files are added to the message being written: each appears as a chip above the text field, with its name and size, and
 ✕ removes it. Several files go in one message, with whatever is typed as their caption; the text is optional.
@@ -182,19 +182,19 @@ Files are added to the message being written: each appears as a chip above the t
   the conversation's.
 - *Delete for me* removes your reference; *delete for everyone* removes the file for all.
 
-*Opening a file keeps it in the app*#idx("opening a file") wherever the app can show it, because a file handed to
+#feature(id: "in-app", title: "Files open in the app, from memory")[*Opening a file keeps it in the app*#idx("opening a file") wherever the app can show it, because a file handed to
 another app is a readable copy the Messenger no longer protects. Photos, PDFs and plain text, video and sound open in
 the app, from memory: nothing of them is written to the device's storage. Anything else, an office document say, can
 only be handed on: never by a tap, always from the menu (*Open with…* or *Share*), and only after a warning that the
 file leaves the app unsealed. Where the tenant keeps files in the app, the menu offers neither, and a file the app
-cannot show says so and stays closed.
+cannot show says so and stays closed.]
 
 // ─────────────────────────────────────────────────────────────────────────────
 = Backing up and restoring
 
-A *backup*#idx("backup") holds all of your conversations in one file, *sealed only*: the messages as they were
+#feature(id: "backup", title: "A backup that stays sealed")[A *backup*#idx("backup") holds all of your conversations in one file, *sealed only*: the messages as they were
 delivered, your own sealed copy of each conversation key, and each file as the envelope it was sent as. Nothing is
-decrypted to make it, so it opens only with a key whose certificate it was sealed to.
+decrypted to make it, so it opens only with a key whose certificate it was sealed to.]
 
 ```
 saconsole messenger backup --out conversations.simplarchive-messages

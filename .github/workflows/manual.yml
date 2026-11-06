@@ -1,6 +1,7 @@
 # The committed manual PDF must be exactly what its source builds (manual/build.sh). It ships inside the module
 # package and the core files a new version of it whenever its bytes change (core ADR 0891), so a stale or
-# non-reproducible PDF is a product defect, not a docs nit. It had drifted behind its source once already.
+# non-reproducible PDF is a product defect, not a docs nit. It had drifted behind its source once already. The same job
+# builds the SITE BUNDLE (core #2165) the website shows: a `site-bundle` artifact of every main build.
 name: Manual
 on:
   pull_request:
@@ -30,3 +31,15 @@ jobs:
             exit 1
           fi
           echo "The committed manual PDF is exactly what its source builds."
+      # The site bundle (core #2165, core ADR 1010): the feature summaries, figures and PDF the website shows on the
+      # module's product page, read out of the manual's markers. Built and checked on every run, so a change that
+      # breaks the contract fails its PR; main's bundle is the website preview's input, and the release attaches it.
+      - name: Build the site bundle
+        run: manual/site-bundle.sh "$RUNNER_TEMP/site"
+      - name: Publish the site bundle for the website's preview
+        if: ${{ github.event_name == 'push' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: site-bundle
+          path: ${{ runner.temp }}/site/site-bundle.zip
+          retention-days: 90
