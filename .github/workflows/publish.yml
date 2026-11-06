@@ -15,7 +15,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write   # the release that carries the site bundle (core #2165)
   id-token: write
 
 jobs:
@@ -44,3 +44,19 @@ jobs:
           --source "https://api.nuget.org/v3/index.json"
           --api-key "${{ steps.nuget-login.outputs.NUGET_API_KEY }}"
           --skip-duplicate
+      # The module's release carries its SITE BUNDLE (core #2165, core ADR 1010): the manual, the feature summaries and
+      # the figures the website shows for this version. Built from this tag's manual, stamped with the version; the
+      # release is made here if the tag has none yet, and gains the bundle if it has.
+      - uses: typst-community/setup-typst@48aeee7543d37f01afd1ffb27307dc277387ba13 # v4.3.1
+        with:
+          typst-version: "0.15.1"
+      - name: Attach the site bundle to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          manual/site-bundle.sh "$RUNNER_TEMP/site" "$version"
+          gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1 \
+            || gh release create "$GITHUB_REF_NAME" --verify-tag --title "$GITHUB_REF_NAME" --generate-notes
+          gh release upload "$GITHUB_REF_NAME" "$RUNNER_TEMP/site/site-bundle.zip" --clobber
