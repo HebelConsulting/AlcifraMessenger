@@ -21,7 +21,7 @@
   #place(bottom + center)[
     #set text(size: 8.5pt, fill: gray)
     #align(center)[
-      Generated #sys.inputs.at("generated", default: "from source") \
+      #if "generated" in sys.inputs [Generated #sys.inputs.generated \ ]
       © #datetime.today().year() \
       Hebel Consulting GmbH \
       Schweighofplatz 7 \
