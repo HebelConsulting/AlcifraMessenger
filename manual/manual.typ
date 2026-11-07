@@ -1,4 +1,4 @@
-#import "template.typ": conf, note, accent, idx, index-page, feature
+#import "template.typ": conf, note, accent, idx, index-page, feature, shot
 
 #show: doc => conf(doc)
 
@@ -45,7 +45,7 @@
 with messages, photos and files. It is a *closed user group*#idx("closed user group"): only users of the same tenant
 take part, and only those with an enrolled key.]
 
-#feature(id: "sealed", title: "Sealed on the device, to the members' keys")[Everything a member writes or sends is *sealed on their own device*#idx("sealed") to the keys of the conversation's
+#feature(id: "sealed", title: "Sealed on the device, to the members' keys", figure: "desktop-messages")[Everything a member writes or sends is *sealed on their own device*#idx("sealed") to the keys of the conversation's
 members, and opened only on a member's device. The server stores and forwards what it cannot read.]
 
 The Messenger is a *free, open-source module*: it needs no licence, and a tenant administrator activates it for the
@@ -95,8 +95,11 @@ configured repository; in each person's *My Messages* a folder named after the o
 
 == Groups
 
-#feature(id: "groups", title: "Groups with administrators")[A *group*#idx("group") has a name and starts with its creator as its *administrator*#idx("administrator"). Administrators
+#feature(id: "groups", title: "Groups with administrators", figure: "desktop-messages-members")[A *group*#idx("group") has a name and starts with its creator as its *administrator*#idx("administrator"). Administrators
 add members, remove them, and make other members administrators or take that back. Anyone may leave.]
+
+// The core's figures, taken at its public commit a6b35195b9da (core #2165); phone figures follow.
+#shot("screenshots/desktop-messages-members.png", [A group's members, administrators first, each with what you may do.])
 
 A group always keeps *at least one administrator*: the last one cannot step down, nor leave while others remain, until
 they have made someone else one. The administrators are listed on the group's folder, so the archive shows them too.
@@ -126,6 +129,9 @@ The apps say both plainly when it happens.
 
 // ─────────────────────────────────────────────────────────────────────────────
 = Messages
+
+#shot("screenshots/desktop-messages.png",
+  [The Messages tab on the desktop: a thread with a reply, two files in one message and a read receipt.])
 
 - *Send.* The device seals the message under the current epoch's key before it leaves; the server refuses a message
   sealed under an older epoch, so a member who missed a removal fetches the new key first.
