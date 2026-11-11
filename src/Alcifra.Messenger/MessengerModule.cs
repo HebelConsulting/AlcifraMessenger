@@ -41,10 +41,12 @@ public sealed class MessengerModule : IIndustryModule
     public IReadOnlyList<ModuleMaskSeed> Masks => MessengerMasks.Seeds;
 
     /// <summary>
-    /// The Messenger encrypts to users, so it licenses the core's certificate enrolment: while it is active, people can
-    /// enrol the certificates their conversation keys are wrapped to.
+    /// The Messenger does NOT license the core's certificate enrolment (owner, 2026-11-11). Enrolment is offered to every
+    /// tenant, and the core's registry answers which certificates a conversation key is wrapped to whether or not a module
+    /// licenses it. Licensing lifts the per-user key limit and lets the Strict tiers start, which belong to the Encryption
+    /// Module: with this free module claiming it, a Demo user enrolled more than two keys.
     /// </summary>
-    public bool LicensesCertificateEnrolment => true;
+    public bool LicensesCertificateEnrolment => false;
 
     private const string ManualResource = "Alcifra.Messenger.Manual.pdf";
 

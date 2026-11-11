@@ -39,9 +39,11 @@ public class ModuleManifestTests
     }
 
     [Fact]
-    public void It_licenses_certificate_enrolment_because_it_encrypts_to_users()
+    // A free module that licensed enrolment lifted the per-user key limit and let the Strict tiers start without the
+    // Encryption Module (owner, 2026-11-11). The core's registry answers who a conversation key is wrapped to all the same.
+    public void It_leaves_licensing_certificate_enrolment_to_the_encryption_module()
     {
-        Assert.True(_module.LicensesCertificateEnrolment);
+        Assert.False(_module.LicensesCertificateEnrolment);
         Assert.Null(_module.ReaderCertificates);   // the core answers from its registry
     }
 
